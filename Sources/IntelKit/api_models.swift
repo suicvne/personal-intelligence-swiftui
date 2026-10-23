@@ -108,6 +108,36 @@ public struct BriefView: Codable, Sendable {
     public let text: String
 }
 
+// MARK: - Activity
+
+public struct EventView: Codable, Sendable, Identifiable, Hashable {
+    public let id: Int
+    /// "source": a change in a monitored source; "semantic": a change in what intel knows.
+    public let layer: String
+    /// commit.added, document.modified, entity.renamed, …
+    public let type: String
+    public let summary: String
+    /// When it happened (in the source, when known), else when intel recorded it.
+    public let at: String
+    /// Source events: where it happened.
+    public let source: String?
+    public let recordId: Int?
+    /// A file path or web URL to open.
+    public let uri: String?
+    /// Semantic events: what it is about.
+    public let entityId: Int?
+    public let entity: String?
+    public let entityType: String?
+    /// Semantic events: who changed it ("user", "llm", "rule", "source").
+    public let origin: String?
+}
+
+public struct EventPage: Codable, Sendable {
+    public let events: [EventView]
+    /// Pass as `before` for the next page; nil on the last page.
+    public let nextBefore: Int?
+}
+
 // MARK: - Proposals
 
 public struct ProposalView: Codable, Sendable, Identifiable, Hashable {

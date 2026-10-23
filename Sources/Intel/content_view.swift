@@ -5,6 +5,7 @@ import SwiftUI
 
 enum Screen: String, CaseIterable, Identifiable {
     case brief = "Brief"
+    case activity = "Activity"
     case proposals = "Proposals"
     case tasks = "Tasks"
     case entities = "Entities"
@@ -15,6 +16,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .brief: "sun.horizon"
+        case .activity: "clock.arrow.circlepath"
         case .proposals: "checklist"
         case .tasks: "square.and.pencil"
         case .entities: "circle.hexagongrid"
@@ -48,6 +50,7 @@ struct ContentView: View {
             Group {
                 switch screen ?? .brief {
                 case .brief: BriefScreen()
+                case .activity: ActivityScreen()
                 case .proposals: ProposalsScreen()
                 case .tasks: TasksScreen()
                 case .entities: EntitiesScreen()
@@ -98,7 +101,7 @@ struct ContentView: View {
         case .brief: return status.needsAttention
         case .proposals: return status.pendingProposals
         case .tasks: return status.openTasks
-        case .entities, .ask: return 0
+        case .activity, .entities, .ask: return 0
         }
     }
 }

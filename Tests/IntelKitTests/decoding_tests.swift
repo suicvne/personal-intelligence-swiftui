@@ -70,6 +70,16 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(answer.references.contains { $0.kind == "tasks" })
 }
 
+@Test func DecodesTheActivityFeed() throws {
+    let page = try Sample("events", as: EventPage.self)
+    #expect(page.nextBefore == page.events.last?.id)
+    let created = try #require(page.events.first { $0.summary == "Created project 'Crawler'" })
+    #expect(created.layer == "semantic" && created.entity == "Crawler" && created.entityType == "project")
+    #expect(created.origin == "source" && created.source == nil)
+    let issue = try #require(page.events.first { $0.type == "issue.created" })
+    #expect(issue.source == "gitlab" && issue.uri?.hasSuffix("/-/issues/1") == true && issue.recordId != nil)
+}
+
 @Test func DecodesPersonas() throws {
     let added = try Sample("persona_add", as: PersonasView.self)
     #expect(added.chosen == nil && added.personas.map(\.name) == ["Flirty"])
@@ -118,7 +128,9 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(Formatting.Day("2026-10-18T16:47:45+00:00", timeZone: newYork) == "2026-10-18")
     #expect(Formatting.Day("2026-10-23T00:03:00+00:00", timeZone: newYork) == "2026-10-22")
     #expect(Formatting.Minute("2026-10-23T00:03:00+00:00", timeZone: newYork) == "2026-10-22 20:03")
+    #expect(Formatting.Time("2026-10-23T00:03:00+00:00", timeZone: newYork) == "20:03")
     #expect(Formatting.Day("2026-10-23", timeZone: newYork) == "2026-10-23")
+    #expect(Formatting.Time("2026-10-23", timeZone: newYork) == "")
     #expect(Formatting.RelativeAge(nil) == "never")
     #expect(Formatting.OpenableURL("/tmp/note.md")?.isFileURL == true)
     #expect(Formatting.OpenableURL("http://git.example.com/x/-/issues/3")?.host() == "git.example.com")

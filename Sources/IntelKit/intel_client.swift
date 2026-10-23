@@ -67,6 +67,18 @@ public struct IntelClient: Sendable {
         try await Post("/api/observations/\(id)/\(action)", body: ObservationResponseRequest(note: note, unhelpful: unhelpful))
     }
 
+    /// The activity feed, newest first. `before` is the previous page's `nextBefore`; `layer` is "source" or
+    /// "semantic" (nil: both); `entity` keeps what is about it and everything that belongs to it.
+    public func Events(limit: Int = 100, before: Int? = nil, layer: String? = nil,
+                       entity: String? = nil) async throws -> EventPage {
+        let query = ["limit": String(limit), "before": before.map(String.init), "layer": layer, "entity": entity]
+        do {
+            return try await Get("/api/events", query: query.compactMapValues { $0 })
+        } catch IntelError.server(let status, _) where status == 404 && before == nil && entity == nil {
+            throw IntelError.Outdated("show recent activity")   // a missing route, not a missing event or entity
+        }
+    }
+
     public func Proposals(filter: String? = nil, status: String = "pending", kind: String? = nil) async throws -> ProposalOverview {
         try await Get("/api/proposals", query: ["filter": filter, "status": status, "kind": kind].compactMapValues { $0 })
     }

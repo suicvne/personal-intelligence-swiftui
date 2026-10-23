@@ -26,12 +26,14 @@ final class AppModel {
         refreshToken += 1
     }
 
-    /// Run an API call, recording failures in `problem`. Returns nil when it failed.
+    /// Run an API call, recording failures in `problem`. Returns nil when it failed or was cancelled.
     func Run<Result: Sendable>(_ call: (IntelClient) async throws -> Result) async -> Result? {
         do {
             let result = try await call(client)
             problem = nil
             return result
+        } catch is CancellationError {
+            return nil
         } catch {
             problem = error.localizedDescription
             return nil

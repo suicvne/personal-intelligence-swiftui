@@ -26,6 +26,12 @@ func LiveEndpointsDecode() async throws {
         _ = try await client.PreviewGroup(overview.groups[0].name)
     }
     _ = try await client.Tasks(includeClosed: true)
+    let feed = try await client.Events(limit: 50)
+    if let before = feed.nextBefore {
+        let earlier = try await client.Events(limit: 50, before: before)
+        #expect(Set(earlier.events.map(\.id)).isDisjoint(with: feed.events.map(\.id)))
+    }
+    #expect(ActivityFeed.Days(feed.events).flatMap(\.runs).map(\.events.count).reduce(0, +) == feed.events.count)
     _ = try await client.LlmModels()
     for type in ["project", "component", "repository"] {
         if let entity = try await client.Entities(type: type).first {

@@ -20,6 +20,11 @@ public enum Formatting {
         Local(timestamp, format: "yyyy-MM-dd HH:mm", width: 16, timeZone: timeZone)
     }
 
+    /// "20:03": the local time of day of an ISO-8601 timestamp; "" for a plain date.
+    public static func Time(_ timestamp: String?, timeZone: TimeZone = .current) -> String {
+        Local(timestamp, format: "HH:mm", width: 0, timeZone: timeZone)
+    }
+
     private static func Local(_ timestamp: String?, format: String, width: Int, timeZone: TimeZone) -> String {
         guard let timestamp else { return "" }
         guard timestamp.count > 10, let date = try? Date(timestamp, strategy: .iso8601) else {

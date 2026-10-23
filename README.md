@@ -6,6 +6,7 @@ shows, through the HTTP API that intel's background service serves. It is delibe
 | Screen | Mirrors | You can |
 |---|---|---|
 | **Brief** | `intel brief` | mark observations seen, dismiss them, or mark them not useful |
+| **Activity** | `intel events` | see what changed lately, by day: commits, notes and issues, and what intel learned (runs of similar changes fold into one row); open a note or an issue |
 | **Proposals** | `intel proposals`, `intel proposal show/approve/reject` | approve or reject, **correct a proposal before approving it** (predicate, subject/object, type, name…), decide a whole group |
 | **Tasks** | `intel tasks` | open the note or the issue, propose GitLab issues for a note's backlog |
 | **Entities** | `intel entity list/show` | browse names, identifiers, file properties, relationships, activity |
@@ -41,15 +42,18 @@ Sources/IntelKit/            no UI, unit-tested
   server_sent_events.swift   the event-stream parser for streaming routes (/api/ask/stream)
   connection_settings.swift  server URL (UserDefaults) + token (Keychain)
   formatting.swift           dates and links
+  activity_feed.swift        the Activity screen's grouping: by day, similar changes folded into runs
 Sources/Intel/               the SwiftUI app
   intel_app.swift            entry point, menus
   app_model.swift            shared state: connection, status, refresh signal
   content_view.swift         sidebar with counts, status footer, problem banner
-  brief_screen.swift  proposals_screen.swift  tasks_screen.swift  entities_screen.swift  ask_screen.swift
+  brief_screen.swift  activity_screen.swift  proposals_screen.swift  tasks_screen.swift  entities_screen.swift
+  ask_screen.swift
   settings_view.swift  shared_views.swift
   debug_snapshot.swift       INTEL_SNAPSHOT=<dir>: save every screen and its layout numbers, then quit
 Tests/IntelKitTests/
   decoding_tests.swift       decodes a real sample of every API response (Samples/), streamed ones too
+  activity_feed_tests.swift  how the Activity screen groups and folds events
   live_tests.swift           optional: decodes your running intel's real data
 Resources/AppIcon.icon       the app icon, an Icon Composer document (edit it in Icon Composer, in Xcode's
                              Developer Tools); it follows macOS 26's Default/Dark/Clear/Tinted icon styles
