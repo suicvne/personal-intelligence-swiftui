@@ -1,0 +1,35 @@
+{
+  "decision_note": null,
+  "evidence": [
+    {
+      "context": "\n## The World Beneath\nBeneath `The Pit` lies a vast world of supernatural history.\nThe original inhabitants predate the existence of humans.",
+      "excerpt": "Beneath `The Pit` lies a vast world of supernatural history.",
+      "kind": "document",
+      "location": "essay.md",
+      "model": null,
+      "note": null,
+      "record_id": 7,
+      "source": "crawler-notes",
+      "stale": false,
+      "title": "World Essay",
+      "uri": "/private/var/folders/p5/yx0gllhs2xgdvj00mf7szb180000gn/T/pytest-of-mike/pytest-98/test_sample_responses_for_clie0/SyncedDocuments/CRAWLER/essay.md"
+    }
+  ],
+  "fields": {
+    "object": "The Pit",
+    "predicate": "DESCRIBES",
+    "subject": "3dcrawler"
+  },
+  "proposal": {
+    "confidence": null,
+    "created_at": "2026-10-22T21:47:13+00:00",
+    "group": "crawler-notes: essay.md",
+    "id": 3,
+    "kind": "relationship",
+    "origin": "llm",
+    "source": "note crawler-notes:essay.md",
+    "status": "pending",
+    "summary": "3dcrawler DESCRIBES The Pit"
+  },
+  "rationale": null
+}

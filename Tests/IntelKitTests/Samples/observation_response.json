@@ -1,0 +1,29 @@
+{
+  "category": "inactivity",
+  "confidence": 0.6,
+  "created_at": "2026-10-22T21:47:13+00:00",
+  "entities": [
+    "Crawler"
+  ],
+  "evidence": [
+    {
+      "context": null,
+      "excerpt": null,
+      "kind": "commit",
+      "location": "init",
+      "model": null,
+      "note": null,
+      "record_id": 2,
+      "source": "3dcrawler",
+      "stale": false,
+      "title": "init",
+      "uri": null
+    }
+  ],
+  "explanation": "The most recent record linked to Crawler is a commit in 3dcrawler.",
+  "id": 1,
+  "priority": 2,
+  "reason": null,
+  "status": "acknowledged",
+  "summary": "No recorded activity for Crawler in 30 days"
+}

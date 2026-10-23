@@ -1,0 +1,27 @@
+{
+  "also_approved": [
+    {
+      "confidence": null,
+      "created_at": "2026-10-22T21:47:13+00:00",
+      "group": "crawler-notes: essay.md",
+      "id": 2,
+      "kind": "entity",
+      "origin": "llm",
+      "source": "note crawler-notes:essay.md",
+      "status": "pending",
+      "summary": "New concept: The Pit"
+    }
+  ],
+  "created_issue_url": null,
+  "proposal": {
+    "confidence": null,
+    "created_at": "2026-10-22T21:47:13+00:00",
+    "group": "crawler-notes: essay.md",
+    "id": 3,
+    "kind": "relationship",
+    "origin": "llm",
+    "source": "note crawler-notes:essay.md",
+    "status": "approved",
+    "summary": "The Pit PART_OF Crawler"
+  }
+}
