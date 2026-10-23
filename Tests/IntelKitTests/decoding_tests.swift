@@ -66,8 +66,16 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(crawler.identifiers["manifest.file"] != nil)
 
     let answer = try Sample("ask", as: AnswerView.self)
-    #expect(answer.mode == "retrieval_only")
+    #expect(answer.mode == "retrieval_only" && answer.spokenText == answer.text)
     #expect(answer.references.contains { $0.kind == "tasks" })
+}
+
+@Test func DecodesPersonas() throws {
+    let added = try Sample("persona_add", as: PersonasView.self)
+    #expect(added.chosen == nil && added.personas.map(\.name) == ["Flirty"])
+    let chosen = try Sample("personas", as: PersonasView.self)
+    #expect(chosen.chosen == chosen.personas.first?.id && chosen.personas.first?.voice == "Breathy.")
+    #expect(chosen.configuredStyle.isEmpty && !chosen.configuredVoice.isEmpty)
 }
 
 @Test func DecodesAStreamedAnswer() throws {
@@ -87,6 +95,7 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     guard case .answer = events.last else { Issue.record("the answer comes last"); return }
     #expect(events.count > 2 && answer.mode == "llm" && answer.gaps == ["No issue data."])
     #expect(streamed == answer.text && streamed.contains("(\"ui.md\").\nNothing"))
+    #expect(answer.text.hasSuffix("recorded [R1].") && answer.spokenText?.hasSuffix("recorded.") == true)
 }
 
 @Test func ParsesEventStreams() throws {

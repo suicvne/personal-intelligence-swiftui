@@ -1,5 +1,6 @@
 // Ask: a question answered from stored evidence, with evidence and inference kept apart. Mirrors `intel ask`.
 // The answer text appears while the model writes it; evidence and references follow when it is done.
+// An answer can be read aloud, by intel's speech server; "Read aloud" does that for every answer.
 
 import IntelKit
 import SwiftUI
@@ -12,6 +13,8 @@ struct AskScreen: View {
     /// The answer text so far, while the model writes it (replaced by `answer` when that arrives).
     @State private var streamed = ""
     @State private var asking: Task<Void, Never>?
+    @State private var speech = SpeechPlayer()
+    @AppStorage("readAnswersAloud") private var readAloud = false
 
     private var isAsking: Bool { asking != nil }
 
@@ -20,6 +23,7 @@ struct AskScreen: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if let answer {
                         Text(answer.text).font(.title3).textSelection(.enabled)
+                        SpeechButton(title: "Read aloud", player: speech) { ReadAloud(answer) }
                         Statements("Evidence (what the records show)", answer.evidence)
                         Statements("Inference (interpretation, not established fact)", answer.inferences)
                         Lines("Missing or uncertain", answer.gaps)
@@ -60,6 +64,9 @@ struct AskScreen: View {
                 Toggle("Use the model", isOn: $useModel)
                     .toggleStyle(.checkbox)
                     .help("Off: show the retrieved evidence without a written answer")
+                Toggle("Read aloud", isOn: $readAloud)
+                    .toggleStyle(.checkbox)
+                    .help("Read each answer aloud once it is complete, in the voice set in intel's config ([voice])")
                 if isAsking {
                     Button("Stop") { asking?.cancel() }
                         .keyboardShortcut(.cancelAction)
@@ -74,7 +81,10 @@ struct AskScreen: View {
             .background(.bar)
         }
         .navigationTitle("Ask")
-        .onDisappear { asking?.cancel() }    // leaving the screen loses the answer, so stop the model too
+        .onDisappear {                      // leaving the screen loses the answer, so stop the model (and voice) too
+            asking?.cancel()
+            speech.Stop()
+        }
     }
 
     private func AskNow() {
@@ -82,15 +92,22 @@ struct AskScreen: View {
         guard !text.isEmpty, !isAsking else { return }
         answer = nil
         streamed = ""
+        speech.Stop()
         asking = Task {
             await model.Follow(model.client.AskStream(question: text, useLlm: useModel)) { event in
                 switch event {
                 case .delta(let piece): streamed += piece
-                case .answer(let final): answer = final
+                case .answer(let final):
+                    answer = final
+                    if readAloud { ReadAloud(final) }
                 }
             }
             asking = nil
         }
+    }
+
+    private func ReadAloud(_ answer: AnswerView) {
+        speech.Speak(answer.spokenText ?? answer.text, with: model.client)
     }
 
     @ViewBuilder

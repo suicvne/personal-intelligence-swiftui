@@ -1,0 +1,13 @@
+{
+  "chosen": null,
+  "configured_style": "",
+  "configured_voice": "A warm, clear voice speaking at a relaxed pace.",
+  "personas": [
+    {
+      "id": 1,
+      "name": "Flirty",
+      "style": "Adoring.",
+      "voice": "Breathy."
+    }
+  ]
+}

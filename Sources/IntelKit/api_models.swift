@@ -260,6 +260,8 @@ public struct AnswerView: Codable, Sendable {
     public let question: String
     public let mode: String
     public let text: String
+    /// `text` without its citations, for reading aloud (nil from an intel that can't read aloud yet).
+    public let spokenText: String?
     public let evidence: [CitedStatement]
     public let inferences: [CitedStatement]
     public let gaps: [String]
@@ -267,4 +269,25 @@ public struct AnswerView: Codable, Sendable {
     public let ambiguous: [String: [String]]
     public let invalidRefs: [String]
     public let note: String?
+}
+
+// MARK: - Personas
+
+public struct PersonaView: Codable, Sendable, Identifiable, Hashable {
+    public let id: Int
+    public let name: String
+    /// How the answer text is written; "" means plainly.
+    public let style: String
+    /// What the voice sounds like when answers are read aloud; "" means `PersonasView.configuredVoice`.
+    public let voice: String
+}
+
+public struct PersonasView: Codable, Sendable {
+    public let personas: [PersonaView]
+    /// The persona in use; nil means the style and voice in intel's config.
+    public let chosen: Int?
+    /// `[ask] persona` in intel's config.
+    public let configuredStyle: String
+    /// `[voice] instruct` in intel's config.
+    public let configuredVoice: String
 }

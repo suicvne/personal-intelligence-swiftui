@@ -1,4 +1,5 @@
-// Settings: where intel's API is, the token to use (kept in the Keychain), and the model intel uses.
+// Settings: where intel's API is, the token to use (kept in the Keychain), the model intel uses, and the
+// persona its answers are written and read aloud in.
 
 import IntelKit
 import SwiftUI
@@ -13,6 +14,10 @@ struct SettingsView: View {
     @State private var modelProblem: String?
     /// The model to use; "" means the one in intel's config.
     @State private var chosenModel = ""
+    @State private var personas: PersonasView?
+    @State private var personaProblem: String?
+    /// The persona to use; nil means intel's config.
+    @State private var chosenPersona: Int?
 
     var body: some View {
         Form {
@@ -41,6 +46,7 @@ struct SettingsView: View {
                 Text("Every LLM task uses this model: answers, extraction and briefs. The background service switches at its next cycle.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            PersonaSection(client: CurrentClient, personas: $personas, chosen: $chosenPersona, problem: personaProblem)
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
@@ -56,6 +62,7 @@ struct SettingsView: View {
             server = model.settings.serverURL.absoluteString
             token = model.settings.token
             await LoadModels()
+            await LoadPersonas()
         }
     }
 
@@ -98,6 +105,7 @@ struct SettingsView: View {
                 let status = try await CurrentClient.Status()
                 check = "Connected: intel \(status.version), \(status.sources.count) sources, \(status.pendingProposals) proposals waiting."
                 await LoadModels()
+                await LoadPersonas()
             } catch {
                 check = error.localizedDescription
             }
@@ -120,12 +128,31 @@ struct SettingsView: View {
         }
     }
 
+    private func LoadPersonas() async {
+        guard Current.IsComplete else {
+            personaProblem = "Connect to intel to choose a persona."
+            return
+        }
+        do {
+            let loaded = try await CurrentClient.Personas()
+            personas = loaded
+            chosenPersona = loaded.chosen
+            personaProblem = nil
+        } catch {
+            personas = nil
+            personaProblem = "Couldn't load intel's personas: \(error.localizedDescription)"
+        }
+    }
+
     private func SaveAll() async {
         do {
             try model.Save(Current)
             if let models, models.enabled, chosenModel != (models.chosen ?? "") {
                 _ = try await CurrentClient.ChooseLlmModel(chosenModel.isEmpty ? nil : chosenModel)
                 model.RequestRefresh()      // the status footer names the model
+            }
+            if let personas, chosenPersona != personas.chosen {
+                _ = try await CurrentClient.ChoosePersona(chosenPersona)
             }
             dismiss()
         } catch {

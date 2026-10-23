@@ -21,6 +21,11 @@ public enum IntelError: LocalizedError, Sendable {
             return "intel sent a response this app doesn't understand. Are the app and intel the same version?"
         }
     }
+
+    /// A 404 from an intel older than the app: its service runs the old code until it restarts.
+    static func Outdated(_ ability: String) -> IntelError {
+        .server(status: 404, message: "This intel can't \(ability) yet. Restart its background service.")
+    }
 }
 
 /// What /api/ask/stream sends: pieces of the answer text while the model writes it, then the answer.
@@ -132,6 +137,42 @@ public struct IntelClient: Sendable {
         try await Post("/api/llm/model", body: ModelChoiceRequest(model: model))
     }
 
+    /// `text` read aloud by intel's speech server (`[voice]` in intel's config), as WAV audio: in the current
+    /// persona's voice, or the one `voice` describes (to try a voice before saving it).
+    public func Speech(text: String, voice: String? = nil) async throws -> Data {
+        do {
+            return try await SendForData(MakePost("/api/speak", body: SpeechRequest(text: text, voice: voice)))
+        } catch IntelError.server(let status, _) where status == 404 {
+            throw IntelError.Outdated("read aloud")
+        }
+    }
+
+    /// The personas, the one in use, and the style and voice in intel's config.
+    public func Personas() async throws -> PersonasView {
+        do {
+            return try await Get("/api/personas")
+        } catch IntelError.server(let status, _) where status == 404 {
+            throw IntelError.Outdated("manage personas")
+        }
+    }
+
+    public func AddPersona(name: String, style: String, voice: String) async throws -> PersonasView {
+        try await Post("/api/personas", body: PersonaRequest(name: name, style: style, voice: voice))
+    }
+
+    public func UpdatePersona(id: Int, name: String, style: String, voice: String) async throws -> PersonasView {
+        try await Post("/api/personas/\(id)", body: PersonaRequest(name: name, style: style, voice: voice))
+    }
+
+    public func DeletePersona(id: Int) async throws -> PersonasView {
+        try await Post("/api/personas/\(id)/delete", body: EmptyBody())
+    }
+
+    /// Answer in this persona's style and voice from now on; nil goes back to those in intel's config.
+    public func ChoosePersona(_ id: Int?) async throws -> PersonasView {
+        try await Post("/api/personas/choose", body: PersonaChoiceRequest(id: id))
+    }
+
     // MARK: Transport
 
     private func Get<Response: Decodable & Sendable>(_ path: String, query: [String: String] = [:]) async throws -> Response {
@@ -164,6 +205,12 @@ public struct IntelClient: Sendable {
     }
 
     private func Send<Response: Decodable & Sendable>(_ request: URLRequest) async throws -> Response {
+        let data = try await SendForData(request)
+        return try IntelClient.Decode(Response.self, from: data)
+    }
+
+    /// The body of a successful response.
+    private func SendForData(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
         do {
@@ -173,7 +220,7 @@ public struct IntelClient: Sendable {
         }
         guard let http = response as? HTTPURLResponse else { throw IntelError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw ServerFailure(status: http.statusCode, body: data) }
-        return try IntelClient.Decode(Response.self, from: data)
+        return data
     }
 
     private func StreamAnswer(question: String, useLlm: Bool,
@@ -315,6 +362,21 @@ private struct TextPiece: Decodable {
 private struct StreamFailure: Decodable {
     let error: String
     let status: Int?
+}
+
+private struct SpeechRequest: Encodable {
+    let text: String
+    let voice: String?
+}
+
+private struct PersonaRequest: Encodable {
+    let name: String
+    let style: String
+    let voice: String
+}
+
+private struct PersonaChoiceRequest: Encodable {
+    let id: Int?            // nil leaves the key out, which intel reads as null
 }
 
 private struct ModelChoiceRequest: Encodable {
