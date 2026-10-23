@@ -96,6 +96,10 @@ struct ProposalsScreen: View {
             groupOrder += names.filter { !groupOrder.contains($0) }
         }
         overview = result
+        // A group decision or a sync can remove the selected proposal; don't keep showing it.
+        if let selection, !result.groups.contains(where: { $0.proposals.contains { $0.id == selection } }) {
+            self.selection = nil
+        }
     }
 
     /// After a decision: report it, reload, and move on to the next proposal in the list.
@@ -106,8 +110,8 @@ struct ProposalsScreen: View {
         }
         lastResult = message
         await Load(resort: false)
-        await model.LoadStatus()
         selection = next.flatMap { candidate in VisibleGroups.flatMap(\.proposals).contains { $0.id == candidate } ? candidate : nil }
+        await model.LoadStatus()
     }
 }
 

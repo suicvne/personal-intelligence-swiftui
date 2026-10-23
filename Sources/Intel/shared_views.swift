@@ -101,7 +101,9 @@ struct Loadable<Content: View>: View {
         if isLoading && isEmpty {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if isEmpty {
+            // Fill like the list would; otherwise an HSplitView collapses to this view's height.
             ContentUnavailableView(emptyTitle, systemImage: emptySymbol)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             content()
         }
