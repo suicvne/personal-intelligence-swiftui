@@ -1,4 +1,5 @@
 // Ask: a question answered from stored evidence, with evidence and inference kept apart. Mirrors `intel ask`.
+// The answer text appears while the model writes it; evidence and references follow when it is done.
 
 import IntelKit
 import SwiftUI
@@ -8,14 +9,16 @@ struct AskScreen: View {
     @State private var question = ""
     @State private var useModel = true
     @State private var answer: AnswerView?
-    @State private var isAsking = false
+    /// The answer text so far, while the model writes it (replaced by `answer` when that arrives).
+    @State private var streamed = ""
+    @State private var asking: Task<Void, Never>?
+
+    private var isAsking: Bool { asking != nil }
 
     var body: some View {
         ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if isAsking {
-                        ProgressView("Thinking…").frame(maxWidth: .infinity)
-                    } else if let answer {
+                    if let answer {
                         Text(answer.text).font(.title3).textSelection(.enabled)
                         Statements("Evidence (what the records show)", answer.evidence)
                         Statements("Inference (interpretation, not established fact)", answer.inferences)
@@ -28,6 +31,19 @@ struct AskScreen: View {
                                 .font(.caption).foregroundStyle(.orange)
                         }
                         if let note = answer.note { Text(note).font(.caption).foregroundStyle(.secondary) }
+                    } else if isAsking && streamed.isEmpty {
+                        ProgressView("Thinking…").frame(maxWidth: .infinity)
+                    } else if !streamed.isEmpty {
+                        Text(streamed).font(.title3).textSelection(.enabled)
+                        if isAsking {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Writing… evidence and references follow.")
+                            }
+                            .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Text("Stopped before the answer was complete.").font(.caption).foregroundStyle(.secondary)
+                        }
                     } else {
                         ContentUnavailableView("Ask about your projects", systemImage: "questionmark.bubble",
                                                description: Text("Answers cite the notes, commits and issues they come from."))
@@ -44,23 +60,36 @@ struct AskScreen: View {
                 Toggle("Use the model", isOn: $useModel)
                     .toggleStyle(.checkbox)
                     .help("Off: show the retrieved evidence without a written answer")
-                Button("Ask", action: AskNow)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(question.trimmingCharacters(in: .whitespaces).isEmpty || isAsking)
+                if isAsking {
+                    Button("Stop") { asking?.cancel() }
+                        .keyboardShortcut(.cancelAction)
+                        .help("Stop the model writing (Esc)")
+                } else {
+                    Button("Ask", action: AskNow)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(question.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
             }
             .padding(12)
             .background(.bar)
         }
         .navigationTitle("Ask")
+        .onDisappear { asking?.cancel() }    // leaving the screen loses the answer, so stop the model too
     }
 
     private func AskNow() {
         let text = question.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty, !isAsking else { return }
-        isAsking = true
-        Task {
-            defer { isAsking = false }
-            answer = await model.Run { try await $0.Ask(question: text, useLlm: useModel) }
+        answer = nil
+        streamed = ""
+        asking = Task {
+            await model.Follow(model.client.AskStream(question: text, useLlm: useModel)) { event in
+                switch event {
+                case .delta(let piece): streamed += piece
+                case .answer(let final): answer = final
+                }
+            }
+            asking = nil
         }
     }
 

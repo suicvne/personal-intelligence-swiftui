@@ -38,6 +38,17 @@ final class AppModel {
         }
     }
 
+    /// Go through a stream of API events as they arrive, recording a failure in `problem` like `Run`.
+    func Follow<Event: Sendable>(_ events: AsyncThrowingStream<Event, Error>, _ handle: (Event) -> Void) async {
+        do {
+            for try await event in events { handle(event) }
+            if !Task.isCancelled { problem = nil }
+        } catch is CancellationError {
+        } catch {
+            problem = error.localizedDescription
+        }
+    }
+
     func LoadStatus() async {
         if let status = await Run({ try await $0.Status() }) {
             self.status = status

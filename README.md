@@ -9,7 +9,7 @@ shows, through the HTTP API that intel's background service serves. It is delibe
 | **Proposals** | `intel proposals`, `intel proposal show/approve/reject` | approve or reject, **correct a proposal before approving it** (predicate, subject/object, type, name…), decide a whole group |
 | **Tasks** | `intel tasks` | open the note or the issue, propose GitLab issues for a note's backlog |
 | **Entities** | `intel entity list/show` | browse names, identifiers, file properties, relationships, activity |
-| **Ask** | `intel ask` | ask a question, open the cited notes, commits and issues |
+| **Ask** | `intel ask` | ask a question and watch the answer being written (Esc stops it), open the cited notes, commits and issues |
 
 Settings (⌘,) also picks the model intel uses, from the models its LLM endpoint offers (like
 `intel llm use`). Everything else (renames, merges, sources, decisions, goals) stays in the CLI.
@@ -38,6 +38,7 @@ Package.swift
 Sources/IntelKit/            no UI, unit-tested
   api_models.swift           the API's JSON as Codable structs (mirrors intel/api.py)
   intel_client.swift         one async method per route; errors carry the server's message
+  server_sent_events.swift   the event-stream parser for streaming routes (/api/ask/stream)
   connection_settings.swift  server URL (UserDefaults) + token (Keychain)
   formatting.swift           dates and links
 Sources/Intel/               the SwiftUI app
@@ -48,7 +49,7 @@ Sources/Intel/               the SwiftUI app
   settings_view.swift  shared_views.swift
   debug_snapshot.swift       INTEL_SNAPSHOT=<dir>: save every screen and its layout numbers, then quit
 Tests/IntelKitTests/
-  decoding_tests.swift       decodes a real sample of every API response (Samples/)
+  decoding_tests.swift       decodes a real sample of every API response (Samples/), streamed ones too
   live_tests.swift           optional: decodes your running intel's real data
 Resources/AppIcon.icon       the app icon, an Icon Composer document (edit it in Icon Composer, in Xcode's
                              Developer Tools); it follows macOS 26's Default/Dark/Clear/Tinted icon styles

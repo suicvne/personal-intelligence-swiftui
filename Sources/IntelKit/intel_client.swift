@@ -1,7 +1,8 @@
 // A small async client for the intel HTTP API (personal-intelligence/src/intel/server.py).
 //
 // One method per route. Every call sends `Authorization: Bearer <token>`; errors come back as
-// IntelError with the server's message, so views can show them as they are.
+// IntelError with the server's message, so views can show them as they are. A streaming route
+// returns its events as an AsyncThrowingStream; ending the iteration closes the connection.
 
 import Foundation
 
@@ -20,6 +21,14 @@ public enum IntelError: LocalizedError, Sendable {
             return "intel sent a response this app doesn't understand. Are the app and intel the same version?"
         }
     }
+}
+
+/// What /api/ask/stream sends: pieces of the answer text while the model writes it, then the answer.
+public enum AskEvent: Sendable {
+    case delta(String)
+    /// The final answer. Its `text` replaces the streamed text (they are usually the same; not when the
+    /// model's reply had to be repaired or the model went away mid-answer).
+    case answer(AnswerView)
 }
 
 public struct IntelClient: Sendable {
@@ -99,6 +108,22 @@ public struct IntelClient: Sendable {
         try await Post("/api/ask", body: AskRequest(question: question, useLlm: useLlm))
     }
 
+    /// Ask, with the answer text streamed while the model writes it. Stopping the iteration (or cancelling
+    /// its task) also stops the model writing.
+    public func AskStream(question: String, useLlm: Bool = true) -> AsyncThrowingStream<AskEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await StreamAnswer(question: question, useLlm: useLlm, into: continuation)
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     /// The model intel uses and the models its endpoint offers.
     public func LlmModels() async throws -> LlmModelsView { try await Get("/api/llm/models") }
 
@@ -114,12 +139,16 @@ public struct IntelClient: Sendable {
     }
 
     private func Post<Body: Encodable, Response: Decodable & Sendable>(_ path: String, body: Body) async throws -> Response {
+        try await Send(MakePost(path, body: body))
+    }
+
+    private func MakePost<Body: Encodable>(_ path: String, body: Body) throws -> URLRequest {
         var request = MakeRequest(path, query: [:], method: "POST")
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         request.httpBody = try encoder.encode(body)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        return try await Send(request)
+        return request
     }
 
     private func MakeRequest(_ path: String, query: [String: String], method: String) -> URLRequest {
@@ -143,15 +172,96 @@ public struct IntelClient: Sendable {
             throw IntelError.unreachable(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else { throw IntelError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONDecoder().decode(ServerError.self, from: data))?.error ?? "HTTP \(http.statusCode)"
-            throw IntelError.server(status: http.statusCode, message: message)
+        guard (200..<300).contains(http.statusCode) else { throw ServerFailure(status: http.statusCode, body: data) }
+        return try IntelClient.Decode(Response.self, from: data)
+    }
+
+    private func StreamAnswer(question: String, useLlm: Bool,
+                              into continuation: AsyncThrowingStream<AskEvent, Error>.Continuation) async throws {
+        let request = try MakePost("/api/ask/stream", body: AskRequest(question: question, useLlm: useLlm))
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do {
+            (bytes, response) = try await session.bytes(for: request)
+        } catch {
+            throw Unreachable(error)
         }
+        guard let http = response as? HTTPURLResponse else { throw IntelError.invalidResponse }
+        if http.statusCode == 404 {
+            // An intel from before streaming (the service runs the old code until it restarts): ask plainly.
+            continuation.yield(.answer(try await Ask(question: question, useLlm: useLlm)))
+            return
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            var body = Data()
+            for try await byte in bytes { body.append(byte) }
+            throw ServerFailure(status: http.statusCode, body: body)
+        }
+
+        var parser = ServerSentEventParser()
+        var line: [UInt8] = []
+        var answered = false
+        func Handle(_ event: ServerSentEvent?) throws {
+            guard let event, let decoded = try IntelClient.AskEventFrom(event) else { return }
+            if case .answer = decoded { answered = true }
+            continuation.yield(decoded)
+        }
+        do {
+            // Split lines by hand: `bytes.lines` drops the blank lines that end each event.
+            for try await byte in bytes {
+                if byte == UInt8(ascii: "\n") {
+                    if line.last == UInt8(ascii: "\r") { line.removeLast() }
+                    try Handle(parser.Feed(String(decoding: line, as: UTF8.self)))
+                    line.removeAll(keepingCapacity: true)
+                } else {
+                    line.append(byte)
+                }
+            }
+        } catch let error as IntelError {
+            throw error
+        } catch {
+            throw Unreachable(error)
+        }
+        try Handle(parser.Feed(String(decoding: line, as: UTF8.self)))
+        try Handle(parser.Finish())
+        if !answered {
+            throw IntelError.unreachable("the connection closed before the answer was complete")
+        }
+    }
+
+    /// One /api/ask/stream event; nil for an event this app doesn't know.
+    static func AskEventFrom(_ event: ServerSentEvent) throws -> AskEvent? {
+        let data = Data(event.data.utf8)
+        switch event.name {
+        case "delta":
+            return .delta(try Decode(TextPiece.self, from: data).text)
+        case "answer":
+            return .answer(try Decode(AnswerView.self, from: data))
+        case "error":
+            let failure = try Decode(StreamFailure.self, from: data)
+            throw IntelError.server(status: failure.status ?? 500, message: failure.error)
+        default:
+            return nil
+        }
+    }
+
+    private static func Decode<Response: Decodable>(_ type: Response.Type, from data: Data) throws -> Response {
         do {
             return try IntelClient.Decoder().decode(Response.self, from: data)
         } catch {
             throw IntelError.invalidResponse
         }
+    }
+
+    private func ServerFailure(status: Int, body: Data) -> IntelError {
+        let message = (try? JSONDecoder().decode(ServerError.self, from: body))?.error ?? "HTTP \(status)"
+        return IntelError.server(status: status, message: message)
+    }
+
+    /// A transport failure as the error to report; cancelling is not a failure.
+    private func Unreachable(_ error: Error) -> Error {
+        if error is CancellationError || (error as? URLError)?.code == .cancelled { return CancellationError() }
+        return IntelError.unreachable(error.localizedDescription)
     }
 
     /// The decoder every response goes through (also used by the tests).
@@ -196,6 +306,15 @@ private struct TaskImportRequest: Encodable {
 private struct AskRequest: Encodable {
     let question: String
     let useLlm: Bool
+}
+
+private struct TextPiece: Decodable {
+    let text: String
+}
+
+private struct StreamFailure: Decodable {
+    let error: String
+    let status: Int?
 }
 
 private struct ModelChoiceRequest: Encodable {

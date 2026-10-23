@@ -70,6 +70,37 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(answer.references.contains { $0.kind == "tasks" })
 }
 
+@Test func DecodesAStreamedAnswer() throws {
+    let url = try #require(Bundle.module.url(forResource: "ask_stream", withExtension: "txt", subdirectory: "Samples"))
+    let events = try ServerSentEventParser.Events(in: String(contentsOf: url, encoding: .utf8)).compactMap {
+        try IntelClient.AskEventFrom($0)
+    }
+    var streamed = ""
+    var final: AnswerView?
+    for event in events {
+        switch event {
+        case .delta(let piece): streamed += piece
+        case .answer(let answer): final = answer
+        }
+    }
+    let answer = try #require(final)
+    guard case .answer = events.last else { Issue.record("the answer comes last"); return }
+    #expect(events.count > 2 && answer.mode == "llm" && answer.gaps == ["No issue data."])
+    #expect(streamed == answer.text && streamed.contains("(\"ui.md\").\nNothing"))
+}
+
+@Test func ParsesEventStreams() throws {
+    let events = ServerSentEventParser.Events(in: ": keep-alive\r\n\r\nevent: delta\r\ndata: {\"text\": \"a\"}\r\n\r\n"
+                                                  + "data: one\ndata:two\nid: 7\n\nevent: answer\ndata: {}")
+    #expect(events == [ServerSentEvent(name: "delta", data: "{\"text\": \"a\"}"),
+                       ServerSentEvent(name: "message", data: "one\ntwo"),
+                       ServerSentEvent(name: "answer", data: "{}")])
+    #expect(try IntelClient.AskEventFrom(ServerSentEvent(name: "progress", data: "{}")) == nil)
+    #expect(throws: IntelError.self) {
+        try IntelClient.AskEventFrom(ServerSentEvent(name: "error", data: #"{"error": "internal error: boom", "status": 500}"#))
+    }
+}
+
 @Test func FormatsTimestampsAndLinks() {
     let newYork = TimeZone(identifier: "America/New_York")!
     #expect(Formatting.Day("2026-10-18T16:47:45+00:00", timeZone: newYork) == "2026-10-18")
