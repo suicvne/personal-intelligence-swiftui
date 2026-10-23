@@ -99,6 +99,14 @@ public struct IntelClient: Sendable {
         try await Post("/api/ask", body: AskRequest(question: question, useLlm: useLlm))
     }
 
+    /// The model intel uses and the models its endpoint offers.
+    public func LlmModels() async throws -> LlmModelsView { try await Get("/api/llm/models") }
+
+    /// Use `model` for every LLM task from now on; nil goes back to the model in intel's config.
+    public func ChooseLlmModel(_ model: String?) async throws -> LlmModelsView {
+        try await Post("/api/llm/model", body: ModelChoiceRequest(model: model))
+    }
+
     // MARK: Transport
 
     private func Get<Response: Decodable & Sendable>(_ path: String, query: [String: String] = [:]) async throws -> Response {
@@ -188,4 +196,8 @@ private struct TaskImportRequest: Encodable {
 private struct AskRequest: Encodable {
     let question: String
     let useLlm: Bool
+}
+
+private struct ModelChoiceRequest: Encodable {
+    let model: String?      // nil leaves the key out, which intel reads as null
 }

@@ -11,7 +11,8 @@ shows, through the HTTP API that intel's background service serves. It is delibe
 | **Entities** | `intel entity list/show` | browse names, identifiers, file properties, relationships, activity |
 | **Ask** | `intel ask` | ask a question, open the cited notes, commits and issues |
 
-Everything else (renames, merges, sources, decisions, goals) stays in the CLI.
+Settings (⌘,) also picks the model intel uses, from the models its LLM endpoint offers (like
+`intel llm use`). Everything else (renames, merges, sources, decisions, goals) stays in the CLI.
 
 ## Run it
 
@@ -49,7 +50,9 @@ Sources/Intel/               the SwiftUI app
 Tests/IntelKitTests/
   decoding_tests.swift       decodes a real sample of every API response (Samples/)
   live_tests.swift           optional: decodes your running intel's real data
-scripts/build_app.sh         release build -> build/Intel.app (ad-hoc signed)
+Resources/AppIcon.icon       the app icon, an Icon Composer document (edit it in Icon Composer, in Xcode's
+                             Developer Tools); it follows macOS 26's Default/Dark/Clear/Tinted icon styles
+scripts/build_app.sh         release build -> build/Intel.app (icon compiled by actool, ad-hoc signed)
 ```
 
 ## Tests

@@ -23,6 +23,14 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(try Sample("sync", as: SyncResult.self).lines.isEmpty == false)
 }
 
+@Test func DecodesLlmModels() throws {
+    let models = try Sample("llm_models", as: LlmModelsView.self)
+    #expect(models.enabled && models.error == nil)
+    #expect(models.configured == "test-model" && models.chosen == "gemma-4-26b-a4b" && models.current == models.chosen)
+    #expect(models.available.contains("qwen-3.8-27b"))
+    #expect(try Sample("llm_model", as: LlmModelsView.self).current == "gemma-4-26b-a4b")
+}
+
 @Test func DecodesBriefAndObservations() throws {
     let brief = try Sample("brief", as: BriefView.self)
     #expect(brief.observations.first?.entities == ["Crawler"])

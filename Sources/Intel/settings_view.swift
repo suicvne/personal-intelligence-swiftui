@@ -1,4 +1,4 @@
-// Settings: where intel's API is and the token to use (kept in the Keychain).
+// Settings: where intel's API is, the token to use (kept in the Keychain), and the model intel uses.
 
 import IntelKit
 import SwiftUI
@@ -9,6 +9,10 @@ struct SettingsView: View {
     @State private var server = ""
     @State private var token = ""
     @State private var check: String?
+    @State private var models: LlmModelsView?
+    @State private var modelProblem: String?
+    /// The model to use; "" means the one in intel's config.
+    @State private var chosenModel = ""
 
     var body: some View {
         Form {
@@ -31,44 +35,101 @@ struct SettingsView: View {
                 Text("The background service serves the API on 127.0.0.1:8765. Get the token with `intel api token`.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section {
+                ModelPicker()
+            } footer: {
+                Text("Every LLM task uses this model: answers, extraction and briefs. The background service switches at its next cycle.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Save") {
-                    do {
-                        try model.Save(Current)
-                        dismiss()
-                    } catch {
-                        check = error.localizedDescription
-                    }
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(token.isEmpty || URL(string: server) == nil)
+                Button("Save") { Task { await SaveAll() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(token.isEmpty || URL(string: server) == nil)
             }
         }
         .formStyle(.grouped)
         .frame(minWidth: 480)
-        .onAppear {
+        .task {
             server = model.settings.serverURL.absoluteString
             token = model.settings.token
+            await LoadModels()
         }
+    }
+
+    @ViewBuilder
+    private func ModelPicker() -> some View {
+        if let models, models.enabled {
+            Picker("Model", selection: $chosenModel) {
+                Text("From intel's config (\(models.configured ?? "?"))").tag("")
+                Divider()
+                ForEach(ModelOptions(models), id: \.self) { Text($0).tag($0) }
+            }
+            if let error = models.error {
+                Text("Couldn't list the endpoint's models: \(error)").font(.caption).foregroundStyle(.orange)
+            }
+        } else if models != nil {
+            Text("The LLM is turned off in intel's config ([llm] enabled = false).").foregroundStyle(.secondary)
+        } else if let modelProblem {
+            Text(modelProblem).font(.caption).foregroundStyle(.secondary)
+        } else {
+            ProgressView().controlSize(.small)
+        }
+    }
+
+    /// The endpoint's models, plus the chosen one if the endpoint didn't list it (so the picker can show it).
+    private func ModelOptions(_ models: LlmModelsView) -> [String] {
+        guard let chosen = models.chosen, !models.available.contains(chosen) else { return models.available }
+        return [chosen] + models.available
     }
 
     private var Current: ConnectionSettings {
         ConnectionSettings(serverURL: URL(string: server) ?? ConnectionSettings.defaultServer, token: token)
     }
 
+    private var CurrentClient: IntelClient { IntelClient(baseURL: Current.serverURL, token: Current.token) }
+
     private func Test() {
-        let client = IntelClient(baseURL: Current.serverURL, token: Current.token)
         check = "Testing…"
         Task {
             do {
-                let status = try await client.Status()
+                let status = try await CurrentClient.Status()
                 check = "Connected: intel \(status.version), \(status.sources.count) sources, \(status.pendingProposals) proposals waiting."
+                await LoadModels()
             } catch {
                 check = error.localizedDescription
             }
+        }
+    }
+
+    private func LoadModels() async {
+        guard Current.IsComplete else {
+            modelProblem = "Connect to intel to choose its model."
+            return
+        }
+        do {
+            let loaded = try await CurrentClient.LlmModels()
+            models = loaded
+            chosenModel = loaded.chosen ?? ""
+            modelProblem = nil
+        } catch {
+            models = nil
+            modelProblem = "Couldn't load intel's models: \(error.localizedDescription)"
+        }
+    }
+
+    private func SaveAll() async {
+        do {
+            try model.Save(Current)
+            if let models, models.enabled, chosenModel != (models.chosen ?? "") {
+                _ = try await CurrentClient.ChooseLlmModel(chosenModel.isEmpty ? nil : chosenModel)
+                model.RequestRefresh()      // the status footer names the model
+            }
+            dismiss()
+        } catch {
+            check = error.localizedDescription
         }
     }
 }

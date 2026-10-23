@@ -26,6 +26,7 @@ func LiveEndpointsDecode() async throws {
         _ = try await client.PreviewGroup(overview.groups[0].name)
     }
     _ = try await client.Tasks(includeClosed: true)
+    _ = try await client.LlmModels()
     for type in ["project", "component", "repository"] {
         if let entity = try await client.Entities(type: type).first {
             _ = try await client.Entity(reference: String(entity.id))

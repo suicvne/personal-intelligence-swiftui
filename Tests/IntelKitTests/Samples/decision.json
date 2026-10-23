@@ -2,7 +2,7 @@
   "also_approved": [
     {
       "confidence": null,
-      "created_at": "2026-10-22T21:47:13+00:00",
+      "created_at": "2026-10-23T00:52:34+00:00",
       "group": "crawler-notes: essay.md",
       "id": 2,
       "kind": "entity",
@@ -15,7 +15,7 @@
   "created_issue_url": null,
   "proposal": {
     "confidence": null,
-    "created_at": "2026-10-22T21:47:13+00:00",
+    "created_at": "2026-10-23T00:52:34+00:00",
     "group": "crawler-notes: essay.md",
     "id": 3,
     "kind": "relationship",

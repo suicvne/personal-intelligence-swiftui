@@ -1,0 +1,13 @@
+{
+  "available": [
+    "gemma-4-26b-a4b",
+    "qwen-3.8-27b",
+    "test-model"
+  ],
+  "base_url": "http://llm.invalid/v1",
+  "chosen": "gemma-4-26b-a4b",
+  "configured": "test-model",
+  "current": "gemma-4-26b-a4b",
+  "enabled": true,
+  "error": null
+}

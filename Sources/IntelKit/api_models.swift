@@ -49,6 +49,23 @@ public struct SyncResult: Codable, Sendable {
     public let queued: Int
 }
 
+// MARK: - LLM model
+
+public struct LlmModelsView: Codable, Sendable {
+    public let enabled: Bool
+    public let baseUrl: String?
+    /// `[llm] model` in intel's config file.
+    public let configured: String?
+    /// Picked here or with `intel llm use`; overrides `configured`.
+    public let chosen: String?
+    /// The model in use: `chosen`, else `configured`.
+    public let current: String?
+    /// What the endpoint offers.
+    public let available: [String]
+    /// Why `available` is empty: the endpoint couldn't be asked.
+    public let error: String?
+}
+
 // MARK: - Evidence and observations
 
 public struct EvidenceView: Codable, Sendable, Hashable {
