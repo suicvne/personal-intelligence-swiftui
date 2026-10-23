@@ -1,5 +1,6 @@
-// Reading an answer aloud: intel turns the text into speech (POST /api/speak, using `[voice]` in its
-// config) and this plays it. Generating the speech can take a while; Stop also cancels that.
+// Reading an answer aloud: intel turns the text into speech (POST /api/speak/stream, using `[voice]` in its
+// config) and this plays it while it is still being generated: the first words play about a second and a
+// half after asking. Stop also stops the speech being generated.
 
 import AVFoundation
 import IntelKit
@@ -8,52 +9,120 @@ import SwiftUI
 
 @MainActor
 @Observable
-final class SpeechPlayer: NSObject, AVAudioPlayerDelegate {
+final class SpeechPlayer {
     enum State { case idle, preparing, playing }
 
     private(set) var state = State.idle
     /// Why the last text couldn't be read aloud, until the next try.
     private(set) var failure: String?
-    @ObservationIgnored private var player: AVAudioPlayer?
-    @ObservationIgnored private var preparing: Task<Void, Never>?
+    /// What is being (or was last) read aloud; Stop forgets it.
+    @ObservationIgnored private var text: String?
+    @ObservationIgnored private var engine: AVAudioEngine?
+    @ObservationIgnored private var node: AVAudioPlayerNode?
+    @ObservationIgnored private var streaming: Task<Void, Never>?
+    @ObservationIgnored private var unplayed = 0        // buffers scheduled and not played yet
+    @ObservationIgnored private var received = false    // the whole speech has arrived
+    @ObservationIgnored private var generation = 0      // which Speak a buffer's callback belongs to
 
-    /// Read `text` aloud, instead of anything being read now: in the current persona's voice, or the one
-    /// `voice` describes.
-    func Speak(_ text: String, voice: String? = nil, with client: IntelClient) {
+    /// Read `text` aloud, in the current persona's voice or the one `voice` describes, instead of anything
+    /// being read now. Text already being read (or read since the last Stop) is not read again, unless `again`.
+    func Speak(_ text: String, voice: String? = nil, again: Bool = false, with client: IntelClient) {
+        if text == self.text && !again { return }
         Stop()
+        self.text = text
         failure = nil
         state = .preparing
-        preparing = Task {
+        let current = generation
+        streaming = Task {
             do {
-                let audio = try await client.Speech(text: text, voice: voice)
+                var reader = WavStreamReader()
+                var format: AVAudioFormat?
+                for try await piece in client.SpeechStream(text: text, voice: voice) {
+                    for event in try reader.Feed(piece) {
+                        switch event {
+                        case .format(let wav): format = try Start(wav)
+                        case .samples(let samples): if let format { Schedule(samples, format, current) }
+                        }
+                    }
+                }
                 try Task.checkCancellation()
-                let player = try AVAudioPlayer(data: audio)
-                player.delegate = self
-                self.player = player
-                state = player.play() ? .playing : .idle
+                received = true
+                FinishIfPlayed()
             } catch {
-                if Task.isCancelled { return }      // stopped: not a failure
+                if Task.isCancelled || current != generation { return }      // stopped: not a failure
+                Release()
                 failure = error.localizedDescription
-                state = .idle
             }
         }
     }
 
     func Stop() {
-        preparing?.cancel()
-        preparing = nil
-        player?.stop()
-        player = nil
+        streaming?.cancel()
+        streaming = nil
+        Release()
+        text = nil
+    }
+
+    /// Stop playing and let go of the audio engine; anything still scheduled is dropped.
+    private func Release() {
+        generation += 1
+        node?.stop()
+        engine?.stop()
+        node = nil
+        engine = nil
+        unplayed = 0
+        received = false
         state = .idle
     }
 
-    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        let finished = ObjectIdentifier(player)
-        Task { @MainActor in
-            guard let current = self.player, ObjectIdentifier(current) == finished else { return }
-            self.player = nil
-            self.state = .idle
+    private func Start(_ wav: WavFormat) throws -> AVAudioFormat {
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: Double(wav.sampleRate),
+                                         channels: AVAudioChannelCount(wav.channels)) else {
+            throw WavStreamError.unsupported("\(wav.sampleRate) Hz, \(wav.channels) channels")
         }
+        let engine = AVAudioEngine()
+        let node = AVAudioPlayerNode()
+        engine.attach(node)
+        engine.connect(node, to: engine.mainMixerNode, format: format)
+        try engine.start()
+        node.play()
+        self.engine = engine
+        self.node = node
+        state = .playing
+        return format
+    }
+
+    /// Queue 16-bit samples to play after those already queued. One that comes late plays when it comes.
+    private func Schedule(_ samples: Data, _ format: AVAudioFormat, _ current: Int) {
+        let channels = Int(format.channelCount)
+        let frames = samples.count / (2 * channels)
+        guard frames > 0, let node,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)),
+              let output = buffer.floatChannelData else { return }
+        buffer.frameLength = AVAudioFrameCount(frames)
+        samples.withUnsafeBytes { raw in
+            for frame in 0..<frames {
+                for channel in 0..<channels {
+                    let offset = (frame * channels + channel) * 2
+                    output[channel][frame] = Float(Int16(littleEndian: raw.loadUnaligned(fromByteOffset: offset,
+                                                                                            as: Int16.self))) / 32768
+                }
+            }
+        }
+        unplayed += 1
+        node.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            Task { @MainActor in self?.Played(current) }
+        }
+    }
+
+    private func Played(_ buffer: Int) {
+        guard buffer == generation else { return }
+        unplayed -= 1
+        FinishIfPlayed()
+    }
+
+    private func FinishIfPlayed() {
+        if received && unplayed == 0 { Release() }
     }
 }
 

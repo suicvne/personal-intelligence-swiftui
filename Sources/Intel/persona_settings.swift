@@ -136,7 +136,7 @@ struct PersonaEditor: View {
                     .lineLimit(3...8)
                 SpeechButton(title: "Preview Voice", player: speech) {
                     let voice = draft.voice.trimmingCharacters(in: .whitespacesAndNewlines)
-                    speech.Speak(PersonaEditor.sample, voice: voice.isEmpty ? nil : voice, with: client)
+                    speech.Speak(PersonaEditor.sample, voice: voice.isEmpty ? nil : voice, again: true, with: client)
                 }
             } footer: {
                 Text("What the voice sounds like when answers are read aloud. Empty: the voice in intel's config.")

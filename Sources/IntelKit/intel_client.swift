@@ -31,6 +31,9 @@ public enum IntelError: LocalizedError, Sendable {
 /// What /api/ask/stream sends: pieces of the answer text while the model writes it, then the answer.
 public enum AskEvent: Sendable {
     case delta(String)
+    /// The whole answer text, as soon as the model has written it (while it still writes the evidence):
+    /// early enough to start reading it aloud. `spokenText` is the text without its citations.
+    case answerText(text: String, spokenText: String)
     /// The final answer. Its `text` replaces the streamed text (they are usually the same; not when the
     /// model's reply had to be repaired or the model went away mid-answer).
     case answer(AnswerView)
@@ -137,13 +140,21 @@ public struct IntelClient: Sendable {
         try await Post("/api/llm/model", body: ModelChoiceRequest(model: model))
     }
 
-    /// `text` read aloud by intel's speech server (`[voice]` in intel's config), as WAV audio: in the current
-    /// persona's voice, or the one `voice` describes (to try a voice before saving it).
-    public func Speech(text: String, voice: String? = nil) async throws -> Data {
-        do {
-            return try await SendForData(MakePost("/api/speak", body: SpeechRequest(text: text, voice: voice)))
-        } catch IntelError.server(let status, _) where status == 404 {
-            throw IntelError.Outdated("read aloud")
+    /// `text` read aloud by intel's speech server (`[voice]` in intel's config), in the current persona's
+    /// voice or the one `voice` describes (to try a voice before saving it). It arrives as one WAV stream
+    /// in pieces, while the speech is still being generated; read them with WavStreamReader. Stopping the
+    /// iteration (or cancelling its task) stops the speech being generated.
+    public func SpeechStream(text: String, voice: String? = nil) -> AsyncThrowingStream<Data, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await StreamSpeech(text: text, voice: voice, into: continuation)
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 
@@ -205,12 +216,6 @@ public struct IntelClient: Sendable {
     }
 
     private func Send<Response: Decodable & Sendable>(_ request: URLRequest) async throws -> Response {
-        let data = try await SendForData(request)
-        return try IntelClient.Decode(Response.self, from: data)
-    }
-
-    /// The body of a successful response.
-    private func SendForData(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
         do {
@@ -220,7 +225,7 @@ public struct IntelClient: Sendable {
         }
         guard let http = response as? HTTPURLResponse else { throw IntelError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw ServerFailure(status: http.statusCode, body: data) }
-        return data
+        return try IntelClient.Decode(Response.self, from: data)
     }
 
     private func StreamAnswer(question: String, useLlm: Bool,
@@ -276,12 +281,47 @@ public struct IntelClient: Sendable {
         }
     }
 
+    private func StreamSpeech(text: String, voice: String?,
+                              into continuation: AsyncThrowingStream<Data, Error>.Continuation) async throws {
+        let request = try MakePost("/api/speak/stream", body: SpeechRequest(text: text, voice: voice))
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do {
+            (bytes, response) = try await session.bytes(for: request)
+        } catch {
+            throw Unreachable(error)
+        }
+        guard let http = response as? HTTPURLResponse else { throw IntelError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 404 { throw IntelError.Outdated("read aloud while it generates speech") }
+            var body = Data()
+            for try await byte in bytes { body.append(byte) }
+            throw ServerFailure(status: http.statusCode, body: body)
+        }
+        var piece = Data()
+        do {
+            for try await byte in bytes {        // passed on in pieces of about a fifth of a second
+                piece.append(byte)
+                if piece.count >= 9_600 {
+                    continuation.yield(piece)
+                    piece = Data()
+                }
+            }
+        } catch {
+            throw Unreachable(error)
+        }
+        if !piece.isEmpty { continuation.yield(piece) }
+    }
+
     /// One /api/ask/stream event; nil for an event this app doesn't know.
     static func AskEventFrom(_ event: ServerSentEvent) throws -> AskEvent? {
         let data = Data(event.data.utf8)
         switch event.name {
         case "delta":
             return .delta(try Decode(TextPiece.self, from: data).text)
+        case "answer_text":
+            let piece = try Decode(AnswerTextPiece.self, from: data)
+            return .answerText(text: piece.text, spokenText: piece.spokenText)
         case "answer":
             return .answer(try Decode(AnswerView.self, from: data))
         case "error":
@@ -357,6 +397,11 @@ private struct AskRequest: Encodable {
 
 private struct TextPiece: Decodable {
     let text: String
+}
+
+private struct AnswerTextPiece: Decodable {
+    let text: String
+    let spokenText: String
 }
 
 private struct StreamFailure: Decodable {

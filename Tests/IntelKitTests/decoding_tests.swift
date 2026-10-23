@@ -84,10 +84,12 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         try IntelClient.AskEventFrom($0)
     }
     var streamed = ""
+    var early: (text: String, spokenText: String)?
     var final: AnswerView?
     for event in events {
         switch event {
         case .delta(let piece): streamed += piece
+        case .answerText(let text, let spokenText): early = (text, spokenText)
         case .answer(let answer): final = answer
         }
     }
@@ -96,6 +98,7 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(events.count > 2 && answer.mode == "llm" && answer.gaps == ["No issue data."])
     #expect(streamed == answer.text && streamed.contains("(\"ui.md\").\nNothing"))
     #expect(answer.text.hasSuffix("recorded [R1].") && answer.spokenText?.hasSuffix("recorded.") == true)
+    #expect(early?.text == answer.text && early?.spokenText == answer.spokenText)     // before the answer
 }
 
 @Test func ParsesEventStreams() throws {

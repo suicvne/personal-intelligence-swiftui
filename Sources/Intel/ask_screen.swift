@@ -23,7 +23,7 @@ struct AskScreen: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if let answer {
                         Text(answer.text).font(.title3).textSelection(.enabled)
-                        SpeechButton(title: "Read aloud", player: speech) { ReadAloud(answer) }
+                        SpeechButton(title: "Read aloud", player: speech) { ReadAloud(answer, again: true) }
                         Statements("Evidence (what the records show)", answer.evidence)
                         Statements("Inference (interpretation, not established fact)", answer.inferences)
                         Lines("Missing or uncertain", answer.gaps)
@@ -97,17 +97,19 @@ struct AskScreen: View {
             await model.Follow(model.client.AskStream(question: text, useLlm: useModel)) { event in
                 switch event {
                 case .delta(let piece): streamed += piece
+                case .answerText(_, let spoken):        // the model still writes the evidence: start reading
+                    if readAloud { speech.Speak(spoken, with: model.client) }
                 case .answer(let final):
                     answer = final
-                    if readAloud { ReadAloud(final) }
+                    if readAloud { ReadAloud(final) }  // unless it is what is already being read
                 }
             }
             asking = nil
         }
     }
 
-    private func ReadAloud(_ answer: AnswerView) {
-        speech.Speak(answer.spokenText ?? answer.text, with: model.client)
+    private func ReadAloud(_ answer: AnswerView, again: Bool = false) {
+        speech.Speak(answer.spokenText ?? answer.text, again: again, with: model.client)
     }
 
     @ViewBuilder
