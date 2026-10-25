@@ -22,8 +22,50 @@ public struct SourceStatus: Codable, Sendable, Identifiable, Hashable {
     public let location: String?
     public let records: Int
     public let lastSuccessAt: String?
+    /// "succeeded", "failed", "running" or "interrupted"; nil before the first sync.
     public let lastRun: String?
     public let lastError: String?
+    /// The git root or notes folder it was discovered in (nil when added by hand, or from an older intel).
+    public let discoveredFrom: String?
+    /// How often the background service syncs it.
+    public let pollIntervalSeconds: Int?
+    /// What else was set: include patterns, projects, groups… (nil from an older intel).
+    public let settings: [String: String]?
+
+    public var failed: Bool { lastRun == "failed" }
+}
+
+/// A source to add (POST /api/sources). `kind` is "filesystem" (a folder of notes), "git" (a local repository)
+/// or "gitlab"; only the fields for that kind are used.
+public struct NewSource: Encodable, Sendable {
+    public var kind: String
+    public var name: String
+    public var path: String?
+    /// Filename patterns to read ("*.md"); empty: intel's defaults.
+    public var include: [String]
+    /// git: also read the repository's Markdown and text files.
+    public var includeDocuments: Bool
+    public var url: String?
+    public var projects: [String]
+    public var groups: [String]
+    /// gitlab: the environment variable (or Keychain item, `intel secret set`) that holds the access token.
+    public var tokenEnv: String?
+    public var verifyTls: Bool
+
+    public init(kind: String, name: String, path: String? = nil, include: [String] = [], includeDocuments: Bool = true,
+                url: String? = nil, projects: [String] = [], groups: [String] = [], tokenEnv: String? = nil,
+                verifyTls: Bool = true) {
+        self.kind = kind
+        self.name = name
+        self.path = path
+        self.include = include
+        self.includeDocuments = includeDocuments
+        self.url = url
+        self.projects = projects
+        self.groups = groups
+        self.tokenEnv = tokenEnv
+        self.verifyTls = verifyTls
+    }
 }
 
 public struct StatusView: Codable, Sendable {
@@ -246,6 +288,19 @@ public struct RelationshipView: Codable, Sendable, Identifiable, Hashable {
     public let confidence: Double?
 }
 
+/// A relationship predicate (USES, PART_OF, …) and what it means.
+public struct PredicateView: Codable, Sendable, Identifiable, Hashable {
+    public let name: String
+    public let meaning: String
+
+    public var id: String { name }
+
+    public init(name: String, meaning: String) {
+        self.name = name
+        self.meaning = meaning
+    }
+}
+
 public struct ActivityView: Codable, Sendable, Hashable {
     public let at: String
     public let kind: String
@@ -286,6 +341,33 @@ public struct ReferenceView: Codable, Sendable, Identifiable, Hashable {
     public var id: String { ref }
 }
 
+/// One lookup the model made before answering.
+public struct LookupView: Codable, Sendable, Hashable {
+    /// The call and what it found: "search_records(since=2026-10-24, until=2026-10-24): 11 records".
+    public let text: String
+    /// What was looked up, in words: "records changed on 2026-10-24" (`text` from an intel that doesn't say).
+    public let description: String
+    /// What it found: "11 records", or the reference it was given ("R13"); nil from an intel that doesn't say.
+    public let result: String?
+
+    public init(text: String, description: String, result: String?) {
+        self.text = text
+        self.description = description
+        self.result = result
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let text = try? decoder.singleValueContainer().decode(String.self) {    // an intel from before descriptions
+            self.init(text: text, description: text, result: nil)
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let text = try container.decode(String.self, forKey: .text)
+        self.init(text: text, description: try container.decodeIfPresent(String.self, forKey: .description) ?? text,
+                  result: try container.decodeIfPresent(String.self, forKey: .result))
+    }
+}
+
 public struct AnswerView: Codable, Sendable {
     public let question: String
     public let mode: String
@@ -299,6 +381,8 @@ public struct AnswerView: Codable, Sendable {
     public let ambiguous: [String: [String]]
     public let invalidRefs: [String]
     public let note: String?
+    /// What the model looked up before answering (nil from an intel that can't look things up).
+    public let lookups: [LookupView]?
 }
 
 // MARK: - Personas

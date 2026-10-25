@@ -68,6 +68,46 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     let answer = try Sample("ask", as: AnswerView.self)
     #expect(answer.mode == "retrieval_only" && answer.spokenText == answer.text)
     #expect(answer.references.contains { $0.kind == "tasks" })
+    #expect(answer.lookups == [])
+}
+
+@Test func DecodesSources() throws {
+    let sources = try Sample("sources", as: [SourceStatus].self)
+    #expect(sources.map(\.name) == ["3dcrawler", "gitlab", "crawler-notes"])
+    let gitlab = try #require(sources.first { $0.kind == "gitlab" })
+    #expect(gitlab.settings == ["projects": "Axiom/3dcrawler"] && gitlab.pollIntervalSeconds == 300)
+    #expect(gitlab.discoveredFrom == nil && !gitlab.failed)
+
+    let added = try Sample("source_add", as: SourceStatus.self)
+    #expect(added.name == "plans" && added.enabled && added.records == 0 && added.lastRun == nil)
+    #expect(added.settings == ["include": "*.md"] && added.location?.hasSuffix("/Plans") == true)
+    #expect(try Sample("source_toggle", as: SourceStatus.self).enabled == false)
+    #expect(try Sample("sync_source", as: SyncResult.self).lines.count == 1)
+}
+
+@Test func DecodesEntityCorrections() throws {
+    let added = try Sample("entity_add", as: EntityDetail.self)
+    #expect(added.entity.name == "The Shaft" && added.entity.type == "concept")
+    #expect(added.entity.otherNames == ["shaft"] && added.description == "The way down")
+    let renamed = try Sample("entity_rename", as: EntityDetail.self)
+    #expect(renamed.entity.name == "Project Succubi")
+    #expect(renamed.names.contains { $0.name == "Crawler" && $0.kind == "former" })
+
+    let predicates = try Sample("predicates", as: [PredicateView].self)
+    #expect(predicates.contains { $0.name == "PART_OF" && !$0.meaning.isEmpty })
+    let relationship = try Sample("relationship", as: RelationshipView.self)
+    #expect(relationship.subject == "The Shaft" && relationship.predicate == "PART_OF")
+    #expect(relationship.object == "Project Succubi" && relationship.status == "confirmed")
+}
+
+@Test func DecodesLookupsFromAnOlderIntel() throws {
+    // An intel from before lookups were described sent their text only: as a string, or as {"text"}.
+    let call = "search_records(since=2026-10-24, until=2026-10-24): 11 records"
+    let plain = try IntelClient.Decoder().decode([LookupView].self, from: Data(#"["\#(call)"]"#.utf8))
+    #expect(plain == [LookupView(text: call, description: call, result: nil)])
+    let event = try IntelClient.AskEventFrom(ServerSentEvent(name: "lookup", data: #"{"text": "\#(call)"}"#))
+    guard case .lookup(let lookup) = event else { Issue.record("not a lookup"); return }
+    #expect(lookup == LookupView(text: call, description: call, result: nil))
 }
 
 @Test func DecodesTheActivityFeed() throws {
@@ -94,10 +134,14 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         try IntelClient.AskEventFrom($0)
     }
     var streamed = ""
+    var lookups: [LookupView] = []
     var early: (text: String, spokenText: String)?
     var final: AnswerView?
     for event in events {
         switch event {
+        case .lookup(let lookup):
+            #expect(streamed.isEmpty)                       // before the answer text
+            lookups.append(lookup)
         case .delta(let piece): streamed += piece
         case .answerText(let text, let spokenText): early = (text, spokenText)
         case .answer(let answer): final = answer
@@ -109,6 +153,9 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(streamed == answer.text && streamed.contains("(\"ui.md\").\nNothing"))
     #expect(answer.text.hasSuffix("recorded [R1].") && answer.spokenText?.hasSuffix("recorded.") == true)
     #expect(early?.text == answer.text && early?.spokenText == answer.spokenText)     // before the answer
+    #expect(lookups == [LookupView(text: "search_records(since=2026-10-24, until=2026-10-24): 0 records",
+                                   description: "records changed on 2026-10-24", result: "0 records")])
+    #expect(answer.lookups == lookups)
 }
 
 @Test func ParsesEventStreams() throws {

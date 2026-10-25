@@ -9,11 +9,12 @@ shows, through the HTTP API that intel's background service serves. It is delibe
 | **Activity** | `intel events` | see what changed lately, by day: commits, notes and issues, and what intel learned (runs of similar changes fold into one row); open a note or an issue |
 | **Proposals** | `intel proposals`, `intel proposal show/approve/reject` | approve or reject, **correct a proposal before approving it** (predicate, subject/object, type, name…), decide a whole group |
 | **Tasks** | `intel tasks` | open the note or the issue, propose GitLab issues for a note's backlog |
-| **Entities** | `intel entity list/show` | browse names, identifiers, file properties, relationships, activity |
-| **Ask** | `intel ask` | ask a question and watch the answer being written (Esc stops it), open the cited notes, commits and issues |
+| **Entities** | `intel entity list/show/add/rename/alias/status/describe/merge`, `intel relationship add/confirm/reject/end` | browse names, identifiers, file properties, relationships, activity; add an entity; rename it, add or remove names, set its status or description, relate it to another, merge a duplicate into it |
+| **Ask** | `intel ask` | ask a question, see what the model looks up ("Looking up records changed on 2026-10-24…") and watch the answer being written (Esc stops it), open the cited notes, commits and issues |
+| **Sources** | `intel source list/add/enable/disable`, `intel sync --source` | see each source's records, last sync and its error; add a folder of notes, a git repository or GitLab projects; enable, disable or sync one |
 
 Settings (⌘,) also picks the model intel uses, from the models its LLM endpoint offers (like
-`intel llm use`). Everything else (renames, merges, sources, decisions, goals) stays in the CLI.
+`intel llm use`). Decisions, goals, mentions and secrets (`intel secret set`) stay in the CLI.
 
 ## Run it
 
@@ -48,7 +49,8 @@ Sources/Intel/               the SwiftUI app
   app_model.swift            shared state: connection, status, refresh signal
   content_view.swift         sidebar with counts, status footer, problem banner
   brief_screen.swift  activity_screen.swift  proposals_screen.swift  tasks_screen.swift  entities_screen.swift
-  ask_screen.swift
+  entity_editing.swift       adding and correcting entities (the sheets the Entities screen opens)
+  ask_screen.swift  sources_screen.swift
   settings_view.swift  shared_views.swift
   debug_snapshot.swift       INTEL_SNAPSHOT=<dir>: save every screen and its layout numbers, then quit
 Tests/IntelKitTests/

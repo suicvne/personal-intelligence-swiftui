@@ -28,8 +28,11 @@ public enum IntelError: LocalizedError, Sendable {
     }
 }
 
-/// What /api/ask/stream sends: pieces of the answer text while the model writes it, then the answer.
+/// What /api/ask/stream sends: what the model looks up first, pieces of the answer text while the model writes
+/// it, then the answer.
 public enum AskEvent: Sendable {
+    /// A lookup the model just made; it reads what was found before it writes (or looks up more).
+    case lookup(LookupView)
     case delta(String)
     /// The whole answer text, as soon as the model has written it (while it still writes the evidence):
     /// early enough to start reading it aloud. `spokenText` is the text without its citations.
@@ -54,7 +57,30 @@ public struct IntelClient: Sendable {
 
     public func Health() async throws -> HealthView { try await Get("/api/health") }
     public func Status() async throws -> StatusView { try await Get("/api/status") }
-    public func Sync() async throws -> SyncResult { try await Post("/api/sync", body: EmptyBody()) }
+    /// Sync every enabled source (after discovering new ones), or only the named `sources`. A first sync can take
+    /// minutes, so this waits longer than other calls.
+    public func Sync(sources: [String]? = nil) async throws -> SyncResult {
+        try await Post("/api/sync", body: SyncRequest(sources: sources), timeout: 900)
+    }
+
+    // MARK: Sources
+
+    public func Sources() async throws -> [SourceStatus] {
+        do {
+            return try await Get("/api/sources")
+        } catch IntelError.server(let status, _) where status == 404 {
+            throw IntelError.Outdated("manage sources")
+        }
+    }
+
+    public func AddSource(_ source: NewSource) async throws -> SourceStatus {
+        try await Post("/api/sources", body: source)
+    }
+
+    /// A disabled source isn't synced; its data is kept.
+    public func SetSourceEnabled(id: Int, enabled: Bool) async throws -> SourceStatus {
+        try await Post("/api/sources/\(id)/\(enabled ? "enable" : "disable")", body: EmptyBody())
+    }
     public func Brief() async throws -> BriefView { try await Get("/api/brief") }
 
     public func Observations(includeClosed: Bool = false) async throws -> [ObservationView] {
@@ -123,6 +149,62 @@ public struct IntelClient: Sendable {
         let encoded = reference.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(["/"])) ?? reference
         return try await Get("/api/entities/\(encoded)")
     }
+
+    // MARK: Correcting entities (each returns the entity as it is now)
+
+    /// `type` is project, component, repository, concept, person, … (lower_snake_case).
+    public func AddEntity(type: String, name: String, aliases: [String] = [],
+                          description: String? = nil) async throws -> EntityDetail {
+        try await Post("/api/entities", body: NewEntityRequest(type: type, name: name, aliases: aliases,
+                                                               description: description))
+    }
+
+    /// The old name stays resolvable, as a former name.
+    public func RenameEntity(id: Int, name: String, note: String? = nil) async throws -> EntityDetail {
+        try await Post("/api/entities/\(id)/rename", body: NameRequest(name: name, kind: nil, note: note))
+    }
+
+    /// `kind` is "alias" (another name) or "former" (a name it used to have).
+    public func AddEntityName(id: Int, name: String, kind: String = "alias", note: String? = nil) async throws -> EntityDetail {
+        try await Post("/api/entities/\(id)/names", body: NameRequest(name: name, kind: kind, note: note))
+    }
+
+    public func RemoveEntityName(id: Int, name: String, note: String? = nil) async throws -> EntityDetail {
+        try await Post("/api/entities/\(id)/names/remove", body: NameRequest(name: name, kind: nil, note: note))
+    }
+
+    /// `status` is "active", "paused" (intentionally: no reminders about inactivity), "done" or "archived".
+    public func SetEntityStatus(id: Int, status: String, note: String? = nil) async throws -> EntityDetail {
+        try await Post("/api/entities/\(id)/status", body: StatusRequest(status: status, note: note))
+    }
+
+    /// An empty description removes it.
+    public func DescribeEntity(id: Int, description: String) async throws -> EntityDetail {
+        try await Post("/api/entities/\(id)/description", body: DescriptionRequest(description: description))
+    }
+
+    /// `absorb` (an id or a name) is the same thing as entity `id`, which takes over its names, links and
+    /// relationships.
+    public func MergeEntity(id: Int, absorb: String, note: String? = nil) async throws -> EntityDetail {
+        try await Post("/api/entities/\(id)/merge", body: MergeRequest(absorb: absorb, note: note))
+    }
+
+    public func Predicates() async throws -> [PredicateView] { try await Get("/api/predicates") }
+
+    /// State a relationship (confirmed). `subject` and `object` are ids or names.
+    public func AddRelationship(subject: String, predicate: String, object: String,
+                                note: String? = nil) async throws -> RelationshipView {
+        try await Post("/api/relationships", body: RelationshipRequest(subject: subject, predicate: predicate,
+                                                                       object: object, note: note))
+    }
+
+    /// `action` is "confirm", "reject" (remembered, so it isn't proposed again) or "end" (no longer true; kept as
+    /// history, and no longer listed).
+    public func DecideRelationship(id: Int, action: String, note: String? = nil) async throws -> RelationshipView {
+        try await Post("/api/relationships/\(id)/\(action)", body: NoteRequest(note: note))
+    }
+
+    // MARK: Ask
 
     public func Ask(question: String, useLlm: Bool = true) async throws -> AnswerView {
         try await Post("/api/ask", body: AskRequest(question: question, useLlm: useLlm))
@@ -202,8 +284,11 @@ public struct IntelClient: Sendable {
         try await Send(MakeRequest(path, query: query, method: "GET"))
     }
 
-    private func Post<Body: Encodable, Response: Decodable & Sendable>(_ path: String, body: Body) async throws -> Response {
-        try await Send(MakePost(path, body: body))
+    private func Post<Body: Encodable, Response: Decodable & Sendable>(_ path: String, body: Body,
+                                                                        timeout: TimeInterval = 120) async throws -> Response {
+        var request = try MakePost(path, body: body)
+        request.timeoutInterval = timeout
+        return try await Send(request)
     }
 
     private func MakePost<Body: Encodable>(_ path: String, body: Body) throws -> URLRequest {
@@ -329,6 +414,8 @@ public struct IntelClient: Sendable {
     static func AskEventFrom(_ event: ServerSentEvent) throws -> AskEvent? {
         let data = Data(event.data.utf8)
         switch event.name {
+        case "lookup":
+            return .lookup(try Decode(LookupView.self, from: data))
         case "delta":
             return .delta(try Decode(TextPiece.self, from: data).text)
         case "answer_text":
@@ -354,6 +441,10 @@ public struct IntelClient: Sendable {
 
     private func ServerFailure(status: Int, body: Data) -> IntelError {
         let message = (try? JSONDecoder().decode(ServerError.self, from: body))?.error ?? "HTTP \(status)"
+        if status == 404 && message.hasPrefix("no route for ") {     // an intel older than the app
+            return IntelError.server(status: status, message: "This intel can't do that yet (\(message)). "
+                                     + "Restart its background service.")
+        }
         return IntelError.server(status: status, message: message)
     }
 
@@ -400,6 +491,48 @@ private struct GroupDecisionRequest: Encodable {
 private struct TaskImportRequest: Encodable {
     let note: String
     let project: String?
+}
+
+private struct SyncRequest: Encodable {
+    let sources: [String]?      // nil leaves the key out: every source
+}
+
+private struct NewEntityRequest: Encodable {
+    let type: String
+    let name: String
+    let aliases: [String]
+    let description: String?
+}
+
+private struct NameRequest: Encodable {
+    let name: String
+    let kind: String?
+    let note: String?
+}
+
+private struct StatusRequest: Encodable {
+    let status: String
+    let note: String?
+}
+
+private struct DescriptionRequest: Encodable {
+    let description: String
+}
+
+private struct MergeRequest: Encodable {
+    let absorb: String
+    let note: String?
+}
+
+private struct RelationshipRequest: Encodable {
+    let subject: String
+    let predicate: String
+    let object: String
+    let note: String?
+}
+
+private struct NoteRequest: Encodable {
+    let note: String?
 }
 
 private struct AskRequest: Encodable {

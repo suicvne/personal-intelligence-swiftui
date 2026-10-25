@@ -1,0 +1,46 @@
+[
+  {
+    "meaning": "related but distinct (editor ASSOCIATED_WITH engine)",
+    "name": "ASSOCIATED_WITH"
+  },
+  {
+    "meaning": "subject was written/created by object (person)",
+    "name": "AUTHORED_BY"
+  },
+  {
+    "meaning": "subject is part of object's scope (repository BELONGS_TO project)",
+    "name": "BELONGS_TO"
+  },
+  {
+    "meaning": "subject must be done before object can proceed (task BLOCKS task)",
+    "name": "BLOCKS"
+  },
+  {
+    "meaning": "subject is about object (decision CONCERNS component)",
+    "name": "CONCERNS"
+  },
+  {
+    "meaning": "subject requires object",
+    "name": "DEPENDS_ON"
+  },
+  {
+    "meaning": "subject documents object (document DESCRIBES component)",
+    "name": "DESCRIBES"
+  },
+  {
+    "meaning": "subject is a structural part of object (component PART_OF project)",
+    "name": "PART_OF"
+  },
+  {
+    "meaning": "goal gives priority to object (goal PRIORITIZES project)",
+    "name": "PRIORITIZES"
+  },
+  {
+    "meaning": "subject replaces object (decision SUPERSEDES decision)",
+    "name": "SUPERSEDES"
+  },
+  {
+    "meaning": "subject depends on / is built with object (project USES engine)",
+    "name": "USES"
+  }
+]

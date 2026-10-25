@@ -1,0 +1,130 @@
+{
+  "activity": [
+    {
+      "at": "2026-08-26T13:13:36+00:00",
+      "kind": "document",
+      "record_id": 6,
+      "source": "crawler-notes",
+      "title": "UI work"
+    },
+    {
+      "at": "2026-08-26T13:13:36+00:00",
+      "kind": "document",
+      "record_id": 7,
+      "source": "crawler-notes",
+      "title": "World Essay"
+    }
+  ],
+  "decision": null,
+  "description": "Defined by project.lson",
+  "entity": {
+    "id": 2,
+    "name": "Project Succubi",
+    "other_names": [
+      "Crawler"
+    ],
+    "status": "active",
+    "type": "project"
+  },
+  "goal": null,
+  "identifiers": {
+    "manifest.file": "git.example.com/axiom/3dcrawler/project.lson"
+  },
+  "names": [
+    {
+      "kind": "canonical",
+      "name": "Project Succubi",
+      "origin": "user",
+      "until": null
+    },
+    {
+      "kind": "former",
+      "name": "Crawler",
+      "origin": "source",
+      "until": "2026-10-25T13:13:36+00:00"
+    }
+  ],
+  "observations": [
+    {
+      "category": "inactivity",
+      "confidence": 0.6,
+      "created_at": "2026-10-25T13:13:36+00:00",
+      "entities": [
+        "Project Succubi"
+      ],
+      "evidence": [
+        {
+          "context": null,
+          "excerpt": null,
+          "kind": "commit",
+          "location": "init",
+          "model": null,
+          "note": null,
+          "record_id": 2,
+          "source": "3dcrawler",
+          "stale": false,
+          "title": "init",
+          "uri": null
+        }
+      ],
+      "explanation": "The most recent record linked to Crawler is a commit in 3dcrawler.",
+      "id": 1,
+      "priority": 2,
+      "reason": null,
+      "status": "acknowledged",
+      "summary": "No recorded activity for Crawler in 30 days"
+    }
+  ],
+  "properties": [
+    {
+      "key": "AssetRootPath",
+      "value": "assets",
+      "where": "3dcrawler:project.lson"
+    },
+    {
+      "key": "CascadeVersion",
+      "value": "1024",
+      "where": "3dcrawler:project.lson"
+    },
+    {
+      "key": "LaunchScene",
+      "value": "/assets/scenes/MainScene.lson",
+      "where": "3dcrawler:project.lson"
+    },
+    {
+      "key": "ProjectName",
+      "value": "Crawler",
+      "where": "3dcrawler:project.lson"
+    },
+    {
+      "key": "ProjectVersion",
+      "value": "16777216",
+      "where": "3dcrawler:project.lson"
+    }
+  ],
+  "relationships": [
+    {
+      "confidence": 0.9,
+      "id": 1,
+      "object": "Project Succubi",
+      "object_id": 2,
+      "origin": "source",
+      "predicate": "BELONGS_TO",
+      "status": "asserted",
+      "subject": "3dcrawler",
+      "subject_id": 1
+    },
+    {
+      "confidence": null,
+      "id": 3,
+      "object": "Project Succubi",
+      "object_id": 2,
+      "origin": "llm",
+      "predicate": "PART_OF",
+      "status": "confirmed",
+      "subject": "The Pit",
+      "subject_id": 4
+    }
+  ],
+  "status_note": null
+}

@@ -1,5 +1,6 @@
 // Entities: what intel knows about your projects, repositories, components and more.
-// Mirrors `intel entity list` / `intel entity show` (read-only for now; correct things with the CLI).
+// Mirrors `intel entity list|show`, and adding and correcting them (entity_editing.swift): `intel entity
+// add|rename|alias|status|describe|merge` and `intel relationship add|confirm|reject|end`.
 
 import IntelKit
 import SwiftUI
@@ -11,6 +12,7 @@ struct EntitiesScreen: View {
     @State private var filter = ""
     @State private var selection: EntitySummary.ID?
     @State private var isLoading = false
+    @State private var adding = false
 
     private let types = ["project", "component", "repository", "decision", "goal", "task", "concept", "person", "location"]
 
@@ -35,7 +37,7 @@ struct EntitiesScreen: View {
 
             Group {
                 if let selection {
-                    EntityDetailPane(id: selection).id(selection)
+                    EntityDetailPane(id: selection) { await Load() }.id(selection)
                 } else {
                     ContentUnavailableView("Select something", systemImage: "hand.point.left")
                 }
@@ -54,6 +56,22 @@ struct EntitiesScreen: View {
                 .pickerStyle(.menu)
                 .help("Which kind of entity to list")
             }
+            ToolbarItem {
+                Button { adding = true } label: { Label("Add Entity", systemImage: "plus") }
+                    .help("Add a project, component, repository, concept, person or location")
+            }
+        }
+        .sheet(isPresented: $adding) {
+            AddEntitySheet(type: type) { added in
+                filter = ""
+                if type != added.entity.type && !type.isEmpty {
+                    type = added.entity.type        // reloads the list
+                } else {
+                    await Load()
+                }
+                selection = added.entity.id
+            }
+            .environment(model)
         }
         .task(id: "\(model.refreshToken)-\(type)") { await Load() }
     }
@@ -78,14 +96,23 @@ struct EntitiesScreen: View {
 private struct EntityDetailPane: View {
     @Environment(AppModel.self) private var model
     let id: Int
+    /// After a correction: the list may need reloading (a new name, a merged entity gone).
+    let changed: () async -> Void
     @State private var detail: EntityDetail?
+    @State private var editing: EntityEdit?
+    /// What the last correction did.
+    @State private var message: String?
 
     var body: some View {
         ScrollView {
             if let detail {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(detail.entity.name).font(.title2.weight(.semibold))
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(detail.entity.name).font(.title2.weight(.semibold))
+                            Spacer()
+                            EditMenu()
+                        }
                         Text("\(detail.entity.type) · \(detail.entity.status)" + (detail.statusNote.map { " — \($0)" } ?? ""))
                             .foregroundStyle(.secondary)
                         if let description = detail.description { Text(description) }
@@ -94,7 +121,14 @@ private struct EntityDetailPane: View {
                     }
                     Block("Names") {
                         ForEach(detail.names, id: \.self) { name in
-                            Row(name.name, "\(name.kind) · \(name.origin)" + (name.until.map { " · until \(Formatting.Day($0))" } ?? ""))
+                            let about = "\(name.kind) · \(name.origin)" + (name.until.map { " · until \(Formatting.Day($0))" } ?? "")
+                            if name.kind == "canonical" {
+                                Row(name.name, about)
+                            } else {
+                                Row(name.name, about) {
+                                    Button("Remove '\(name.name)'") { RemoveName(name.name) }
+                                }
+                            }
                         }
                     }
                     if !detail.identifiers.isEmpty {
@@ -113,8 +147,16 @@ private struct EntityDetailPane: View {
                         Block("Relationships") {
                             ForEach(detail.relationships) { relationship in
                                 Row("\(relationship.subject) \(relationship.predicate) \(relationship.object)",
-                                    "\(relationship.status) · \(relationship.origin)")
-                                    .strikethrough(relationship.status == "rejected")
+                                    "\(relationship.status) · \(relationship.origin)") {
+                                    if relationship.status != "confirmed" {
+                                        Button("Confirm") { Decide(relationship, "confirm") }
+                                    }
+                                    if relationship.status != "rejected" {
+                                        Button("Reject (not true; don't propose it again)") { Decide(relationship, "reject") }
+                                        Button("End (no longer true; kept as history)") { Decide(relationship, "end") }
+                                    }
+                                }
+                                .strikethrough(relationship.status == "rejected")
                             }
                         }
                     }
@@ -135,11 +177,58 @@ private struct EntityDetailPane: View {
                 ProgressView().padding(40)
             }
         }
+        .safeAreaInset(edge: .bottom) { MessageBar(message: message) }
         .task { await Load() }
+        .sheet(item: $editing) { edit in
+            if let detail {
+                EntityEditSheet(edit: edit, entity: detail) { done in await Changed(done) }
+                    .environment(model)
+            }
+        }
+    }
+
+    private func EditMenu() -> some View {
+        Menu {
+            Button("Rename…") { editing = .rename }
+            Button("Add a Name…") { editing = .addName }
+            Button("Set Status…") { editing = .status }
+            Button("Edit Description…") { editing = .description }
+            Divider()
+            Button("Add a Relationship…") { editing = .relationship }
+            Divider()
+            Button("Merge Another Entity Into This…") { editing = .merge }
+        } label: {
+            Label("Edit", systemImage: "pencil")
+        }
+        .fixedSize()
+        .help("Correct what intel knows about it")
     }
 
     private func Load() async {
         detail = await model.Run { try await $0.Entity(reference: String(id)) }
+    }
+
+    private func Changed(_ done: String) async {
+        message = done
+        await Load()
+        await changed()
+    }
+
+    private func RemoveName(_ name: String) {
+        Task {
+            if await model.Run({ try await $0.RemoveEntityName(id: id, name: name) }) != nil {
+                await Changed("Removed '\(name)'")
+            }
+        }
+    }
+
+    private func Decide(_ relationship: RelationshipView, _ action: String) {
+        Task {
+            if let result = await model.Run({ try await $0.DecideRelationship(id: relationship.id, action: action) }) {
+                let done = ["confirm": "Confirmed", "reject": "Rejected", "end": "Ended"][action] ?? action
+                await Changed("\(done): \(result.subject) \(result.predicate) \(result.object)")
+            }
+        }
     }
 
     private func Block<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -154,6 +243,17 @@ private struct EntityDetailPane: View {
             Text(text).textSelection(.enabled)
             Spacer()
             Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
+    /// A line with things to do about it, in a menu at its end.
+    private func Row<Actions: View>(_ text: String, _ detail: String, @ViewBuilder actions: () -> Actions) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Row(text, detail)
+            Menu { actions() } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
         }
     }
 }

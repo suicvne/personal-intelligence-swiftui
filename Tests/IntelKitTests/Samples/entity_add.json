@@ -1,0 +1,34 @@
+{
+  "activity": [],
+  "decision": null,
+  "description": "The way down",
+  "entity": {
+    "id": 5,
+    "name": "The Shaft",
+    "other_names": [
+      "shaft"
+    ],
+    "status": "active",
+    "type": "concept"
+  },
+  "goal": null,
+  "identifiers": {},
+  "names": [
+    {
+      "kind": "canonical",
+      "name": "The Shaft",
+      "origin": "user",
+      "until": null
+    },
+    {
+      "kind": "alias",
+      "name": "shaft",
+      "origin": "user",
+      "until": null
+    }
+  ],
+  "observations": [],
+  "properties": [],
+  "relationships": [],
+  "status_note": null
+}

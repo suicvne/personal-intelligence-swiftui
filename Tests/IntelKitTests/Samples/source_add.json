@@ -1,0 +1,17 @@
+{
+  "discovered": false,
+  "discovered_from": null,
+  "enabled": true,
+  "id": 4,
+  "kind": "filesystem",
+  "last_error": null,
+  "last_run": null,
+  "last_success_at": null,
+  "location": "/private/var/folders/p5/yx0gllhs2xgdvj00mf7szb180000gn/T/pytest-of-mike/pytest-167/test_sample_responses_for_clie0/Plans",
+  "name": "plans",
+  "poll_interval_seconds": 300,
+  "records": 0,
+  "settings": {
+    "include": "*.md"
+  }
+}

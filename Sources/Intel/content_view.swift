@@ -10,6 +10,7 @@ enum Screen: String, CaseIterable, Identifiable {
     case tasks = "Tasks"
     case entities = "Entities"
     case ask = "Ask"
+    case sources = "Sources"
 
     var id: String { rawValue }
 
@@ -21,6 +22,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .tasks: "square.and.pencil"
         case .entities: "circle.hexagongrid"
         case .ask: "questionmark.bubble"
+        case .sources: "tray.2"
         }
     }
 }
@@ -55,6 +57,7 @@ struct ContentView: View {
                 case .tasks: TasksScreen()
                 case .entities: EntitiesScreen()
                 case .ask: AskScreen()
+                case .sources: SourcesScreen()
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -101,6 +104,7 @@ struct ContentView: View {
         case .brief: return status.needsAttention
         case .proposals: return status.pendingProposals
         case .tasks: return status.openTasks
+        case .sources: return status.sources.filter { $0.enabled && $0.failed }.count     // the last sync failed
         case .activity, .entities, .ask: return 0
         }
     }
