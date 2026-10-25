@@ -9,6 +9,7 @@ struct EntitiesScreen: View {
     @Environment(AppModel.self) private var model
     @State private var entities: [EntitySummary] = []
     @State private var type = "project"
+    @State private var showArchived = false
     @State private var filter = ""
     @State private var selection: EntitySummary.ID?
     @State private var isLoading = false
@@ -57,6 +58,9 @@ struct EntitiesScreen: View {
                 .help("Which kind of entity to list")
             }
             ToolbarItem {
+                Toggle("Show archived", isOn: $showArchived).toggleStyle(.checkbox)
+            }
+            ToolbarItem {
                 Button { adding = true } label: { Label("Add Entity", systemImage: "plus") }
                     .help("Add a project, component, repository, concept, person or location")
             }
@@ -78,9 +82,9 @@ struct EntitiesScreen: View {
 
     private var Visible: [EntitySummary] {
         let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !needle.isEmpty else { return entities }
         return entities.filter { entity in
-            ([entity.name] + entity.otherNames).contains { $0.lowercased().contains(needle) }
+            (showArchived || entity.status != "archived")
+                && (needle.isEmpty || ([entity.name] + entity.otherNames).contains { $0.lowercased().contains(needle) })
         }
     }
 
