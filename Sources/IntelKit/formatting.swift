@@ -25,6 +25,14 @@ public enum Formatting {
         Local(timestamp, format: "HH:mm", width: 0, timeZone: timeZone)
     }
 
+    /// "Last 24 hours": the span a brief covers, from its window start to when it was made.
+    public static func LastHours(since start: String?, until end: String) -> String {
+        guard let start, let from = try? Date(start, strategy: .iso8601),
+              let to = try? Date(end, strategy: .iso8601) else { return "Recent changes" }
+        let hours = max(1, Int((to.timeIntervalSince(from) / 3600).rounded()))
+        return hours == 1 ? "Last hour" : "Last \(hours) hours"
+    }
+
     private static func Local(_ timestamp: String?, format: String, width: Int, timeZone: TimeZone) -> String {
         guard let timestamp else { return "" }
         guard timestamp.count > 10, let date = try? Date(timestamp, strategy: .iso8601) else {

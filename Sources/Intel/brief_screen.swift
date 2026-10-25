@@ -49,8 +49,9 @@ struct BriefScreen: View {
     }
 
     private func Header(_ brief: BriefView) -> some View {
-        Text("Changes since \(Formatting.Minute(brief.windowStart))")
+        Text(Formatting.LastHours(since: brief.windowStart, until: brief.createdAt))
             .font(.title3.weight(.semibold))
+            .help("Changes since \(Formatting.Minute(brief.windowStart))")
     }
 
     @ViewBuilder
