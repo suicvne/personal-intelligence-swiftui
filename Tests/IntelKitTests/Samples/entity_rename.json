@@ -1,14 +1,14 @@
 {
   "activity": [
     {
-      "at": "2026-08-26T13:13:36+00:00",
+      "at": "2026-08-26T13:56:19+00:00",
       "kind": "document",
       "record_id": 6,
       "source": "crawler-notes",
       "title": "UI work"
     },
     {
-      "at": "2026-08-26T13:13:36+00:00",
+      "at": "2026-08-26T13:56:19+00:00",
       "kind": "document",
       "record_id": 7,
       "source": "crawler-notes",
@@ -41,14 +41,14 @@
       "kind": "former",
       "name": "Crawler",
       "origin": "source",
-      "until": "2026-10-25T13:13:36+00:00"
+      "until": "2026-10-25T13:56:20+00:00"
     }
   ],
   "observations": [
     {
       "category": "inactivity",
       "confidence": 0.6,
-      "created_at": "2026-10-25T13:13:36+00:00",
+      "created_at": "2026-10-25T13:56:19+00:00",
       "entities": [
         "Project Succubi"
       ],

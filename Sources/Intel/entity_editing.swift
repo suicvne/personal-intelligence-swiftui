@@ -131,7 +131,7 @@ struct EntityEditSheet: View {
                     if let meaning = predicates.first(where: { $0.name == predicate })?.meaning {
                         LabeledContent("") { Text(meaning).font(.caption).foregroundStyle(.secondary) }
                     }
-                    LabeledContent("Other") { EntityChooser(excluding: entity.entity.id, selection: $other) }
+                    LabeledContent("Other") { EntityChooser(excluding: [entity.entity.id], selection: $other) }
                     Toggle("\(name) is the object", isOn: $reversed)
                     NoteField()
                 }
@@ -141,7 +141,7 @@ struct EntityEditSheet: View {
             case .merge:
                 EditForm(title: "Merge into \(name)", footnote: MergeConsequence, action: "Merge", destructive: true,
                          canSave: other != nil, isWorking: isWorking, failure: failure, save: Save) {
-                    LabeledContent("The same as") { EntityChooser(excluding: entity.entity.id, selection: $other) }
+                    LabeledContent("The same as") { EntityChooser(excluding: [entity.entity.id], selection: $other) }
                     NoteField()
                 }
             }
@@ -225,7 +225,9 @@ struct EntityEditSheet: View {
 /// Pick another entity: type to narrow the list, click one.
 struct EntityChooser: View {
     @Environment(AppModel.self) private var model
-    let excluding: Int
+    /// Not offered: these entities, and entities of these types.
+    var excluding: Set<Int> = []
+    var excludingTypes: Set<String> = []
     @Binding var selection: EntitySummary?
     @State private var entities: [EntitySummary] = []
     @State private var filter = ""
@@ -248,22 +250,21 @@ struct EntityChooser: View {
         }
         .task {
             let all = await model.Run { try await $0.Entities() } ?? []
-            entities = all.filter { $0.id != excluding }
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            entities = all.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         }
     }
 
     private var Visible: [EntitySummary] {
         let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !needle.isEmpty else { return entities }
         return entities.filter { entity in
-            ([entity.name] + entity.otherNames).contains { $0.lowercased().contains(needle) }
+            !excluding.contains(entity.id) && !excludingTypes.contains(entity.type)
+                && (needle.isEmpty || ([entity.name] + entity.otherNames).contains { $0.lowercased().contains(needle) })
         }
     }
 }
 
 /// A correction's sheet: title, fields, what saving does, why it failed, and Cancel / the action.
-private struct EditForm<Fields: View>: View {
+struct EditForm<Fields: View>: View {
     @Environment(\.dismiss) private var dismiss
     let title: String
     let footnote: String

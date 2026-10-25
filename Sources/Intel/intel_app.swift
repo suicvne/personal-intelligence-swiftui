@@ -1,4 +1,4 @@
-// The app: one window with seven screens, plus Settings (⌘,).
+// The app: one window with eight screens, plus Settings (⌘,).
 
 import AppKit
 import IntelKit

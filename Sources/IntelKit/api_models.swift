@@ -323,6 +323,34 @@ public struct EntityDetail: Codable, Sendable {
     public let goal: String?
 }
 
+// MARK: - Goals
+
+/// Something a goal prioritizes, and when it last had recorded activity.
+public struct GoalTargetView: Codable, Sendable, Identifiable, Hashable {
+    public let id: Int
+    public let name: String
+    public let type: String
+    /// Its newest recorded activity (its repositories' and components' included); nil when there is none.
+    public let lastActivityAt: String?
+}
+
+public struct GoalView: Codable, Sendable, Identifiable, Hashable {
+    /// The goal's entity id (G<id> in the CLI).
+    public let id: Int
+    public let statement: String
+    /// 1 is the highest.
+    public let priority: Int
+    /// "2026-10-30" (a calendar day); the brief reminds you as it nears.
+    public let targetDate: String?
+    /// "active", "achieved" or "abandoned".
+    public let state: String
+    public let prioritizes: [GoalTargetView]
+    /// Open observations about it: its deadline, work going elsewhere.
+    public let observations: [ObservationView]
+
+    public var isActive: Bool { state == "active" }
+}
+
 // MARK: - Ask
 
 public struct CitedStatement: Codable, Sendable, Hashable {

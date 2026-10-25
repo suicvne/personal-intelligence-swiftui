@@ -191,6 +191,36 @@ public struct IntelClient: Sendable {
 
     public func Predicates() async throws -> [PredicateView] { try await Get("/api/predicates") }
 
+    // MARK: Goals
+
+    /// Active goals by priority; `includeClosed` adds achieved and abandoned ones.
+    public func Goals(includeClosed: Bool = false) async throws -> [GoalView] {
+        do {
+            return try await Get("/api/goals", query: includeClosed ? ["all": "1"] : [:])
+        } catch IntelError.server(let status, _) where status == 404 {
+            throw IntelError.Outdated("manage goals")
+        }
+    }
+
+    /// `prioritizes`: the entities it is about (ids or names). `priority`: 1 (highest) to 3. `targetDate`: "2026-10-30".
+    public func AddGoal(statement: String, prioritizes: [String], priority: Int = 2,
+                        targetDate: String? = nil) async throws -> GoalView {
+        try await Post("/api/goals", body: GoalRequest(statement: statement, prioritizes: prioritizes, priority: priority,
+                                                       targetDate: targetDate, note: nil))
+    }
+
+    /// Replace its priority, target date (nil: none) and what it prioritizes.
+    public func UpdateGoal(id: Int, priority: Int, targetDate: String?, prioritizes: [String],
+                           note: String? = nil) async throws -> GoalView {
+        try await Post("/api/goals/\(id)", body: GoalRequest(statement: nil, prioritizes: prioritizes, priority: priority,
+                                                             targetDate: targetDate, note: note))
+    }
+
+    /// `state` is "active", "achieved" or "abandoned".
+    public func SetGoalState(id: Int, state: String, note: String? = nil) async throws -> GoalView {
+        try await Post("/api/goals/\(id)/state", body: GoalStateRequest(state: state, note: note))
+    }
+
     /// State a relationship (confirmed). `subject` and `object` are ids or names.
     public func AddRelationship(subject: String, predicate: String, object: String,
                                 note: String? = nil) async throws -> RelationshipView {
@@ -512,6 +542,19 @@ private struct NameRequest: Encodable {
 
 private struct StatusRequest: Encodable {
     let status: String
+    let note: String?
+}
+
+private struct GoalStateRequest: Encodable {
+    let state: String
+    let note: String?
+}
+
+private struct GoalRequest: Encodable {
+    let statement: String?
+    let prioritizes: [String]
+    let priority: Int
+    let targetDate: String?     // nil leaves the key out: no target date
     let note: String?
 }
 

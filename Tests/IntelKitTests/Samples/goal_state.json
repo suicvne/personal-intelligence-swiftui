@@ -1,0 +1,22 @@
+{
+  "id": 6,
+  "observations": [],
+  "prioritizes": [
+    {
+      "id": 2,
+      "last_activity_at": "2026-08-26T13:56:19+00:00",
+      "name": "Project Succubi",
+      "type": "project"
+    },
+    {
+      "id": 1,
+      "last_activity_at": null,
+      "name": "3dcrawler",
+      "type": "repository"
+    }
+  ],
+  "priority": 2,
+  "state": "achieved",
+  "statement": "Ship the Crawler demo",
+  "target_date": null
+}

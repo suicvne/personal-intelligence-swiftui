@@ -8,6 +8,7 @@ enum Screen: String, CaseIterable, Identifiable {
     case activity = "Activity"
     case proposals = "Proposals"
     case tasks = "Tasks"
+    case goals = "Goals"
     case entities = "Entities"
     case ask = "Ask"
     case sources = "Sources"
@@ -20,6 +21,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .activity: "clock.arrow.circlepath"
         case .proposals: "checklist"
         case .tasks: "square.and.pencil"
+        case .goals: "target"
         case .entities: "circle.hexagongrid"
         case .ask: "questionmark.bubble"
         case .sources: "tray.2"
@@ -55,6 +57,7 @@ struct ContentView: View {
                 case .activity: ActivityScreen()
                 case .proposals: ProposalsScreen()
                 case .tasks: TasksScreen()
+                case .goals: GoalsScreen()
                 case .entities: EntitiesScreen()
                 case .ask: AskScreen()
                 case .sources: SourcesScreen()
@@ -105,7 +108,7 @@ struct ContentView: View {
         case .proposals: return status.pendingProposals
         case .tasks: return status.openTasks
         case .sources: return status.sources.filter { $0.enabled && $0.failed }.count     // the last sync failed
-        case .activity, .entities, .ask: return 0
+        case .activity, .goals, .entities, .ask: return 0
         }
     }
 }

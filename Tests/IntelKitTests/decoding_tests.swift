@@ -100,6 +100,18 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(relationship.object == "Project Succubi" && relationship.status == "confirmed")
 }
 
+@Test func DecodesGoals() throws {
+    let added = try Sample("goal_add", as: GoalView.self)
+    #expect(added.statement == "Ship the Crawler demo" && added.priority == 1 && added.isActive)
+    #expect(added.targetDate == "2026-11-01" && added.prioritizes.map(\.type) == ["project"])
+    #expect(added.prioritizes.first?.lastActivityAt != nil)
+    let updated = try Sample("goal_update", as: GoalView.self)
+    #expect(updated.priority == 2 && updated.targetDate == nil && updated.prioritizes.count == 2)
+    let achieved = try Sample("goal_state", as: GoalView.self)
+    #expect(achieved.state == "achieved" && !achieved.isActive)
+    #expect(try Sample("goals", as: [GoalView].self).map(\.id) == [added.id])
+}
+
 @Test func DecodesLookupsFromAnOlderIntel() throws {
     // An intel from before lookups were described sent their text only: as a string, or as {"text"}.
     let call = "search_records(since=2026-10-24, until=2026-10-24): 11 records"
@@ -181,6 +193,16 @@ private func Sample<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(Formatting.LastHours(since: "2026-10-24T11:40:00+00:00", until: "2026-10-25T11:40:00+00:00") == "Last 24 hours")
     #expect(Formatting.LastHours(since: "2026-10-25T10:40:00+00:00", until: "2026-10-25T11:40:00+00:00") == "Last hour")
     #expect(Formatting.LastHours(since: nil, until: "2026-10-25T11:40:00+00:00") == "Recent changes")
+    let evening = ISO8601DateFormatter().date(from: "2026-10-26T03:30:00Z")!    // Sunday 23:30 in New York
+    #expect(Formatting.DaysUntil("2026-10-26", now: evening, timeZone: newYork) == 1)
+    #expect(Formatting.Due("2026-10-25", now: evening, timeZone: newYork) == "due today")
+    #expect(Formatting.Due("2026-10-26", now: evening, timeZone: newYork) == "due tomorrow")
+    #expect(Formatting.Due("2026-11-01", now: evening, timeZone: newYork) == "due in 7 days")
+    #expect(Formatting.Due("2026-10-24", now: evening, timeZone: newYork) == "a day overdue")
+    #expect(Formatting.Due("2026-10-20", now: evening, timeZone: newYork) == "5 days overdue")
+    #expect(Formatting.Due("someday", now: evening, timeZone: newYork) == "due someday")
+    #expect(Formatting.CalendarDay(evening, timeZone: newYork) == "2026-10-25")
+    #expect(Formatting.CalendarDay(evening, timeZone: TimeZone(identifier: "UTC")!) == "2026-10-26")
     #expect(Formatting.RelativeAge(nil) == "never")
     #expect(Formatting.OpenableURL("/tmp/note.md")?.isFileURL == true)
     #expect(Formatting.OpenableURL("http://git.example.com/x/-/issues/3")?.host() == "git.example.com")
